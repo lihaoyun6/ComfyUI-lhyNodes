@@ -56,13 +56,6 @@ class MaskToSAMCoords:
         coords_str = json.dumps(coords)
         
         return (coords_str,)
-    
-NODE_CLASS_MAPPINGS = {
-    "MaskToSAMCoords": MaskToSAMCoords
-}
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "MaskToSAMCoords": "Mask to SAM Coordinates"
-}
 
 class StrFormat:
     @classmethod
