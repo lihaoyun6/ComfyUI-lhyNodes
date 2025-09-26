@@ -5,6 +5,45 @@ import random
 import json
 import torch
 
+from nodes import MAX_RESOLUTION
+import comfy.samplers
+
+class KSamplerConfig:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "steps_total": ("INT", {
+                    "default": 30,
+                    "min": 1,
+                    "max": MAX_RESOLUTION,
+                    "step": 1,
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 8.0,
+                    "min": 0.0,
+                    "max": 100.0,
+                    "step": 0.5,
+                }),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS,),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
+            },
+        }
+    
+    RETURN_TYPES = ("INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS,
+                                    comfy.samplers.KSampler.SCHEDULERS)
+    RETURN_NAMES = ("STEPS", "CFG", "SAMPLER", "SCHEDULER")
+    FUNCTION = "main"
+    CATEGORY = "utils"
+    
+    def main(self, steps_total, cfg, sampler_name, scheduler):
+        return (
+            steps_total,
+            cfg,
+            sampler_name,
+            scheduler,
+        )
+
 class MaskToSAMCoords:
     @classmethod
     def INPUT_TYPES(cls):
@@ -223,6 +262,7 @@ class CSVRandomPickerAdv:
         return (result,)
 
 NODE_CLASS_MAPPINGS = {
+    "KSamplerConfig": KSamplerConfig,
     "MaskToSAMCoords": MaskToSAMCoords,
     "StrFormat": StrFormat,
     "StrFormatAdv": StrFormatAdv,
@@ -231,6 +271,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "KSamplerConfig": "KSampler Config",
     "MaskToSAMCoords": "Mask to SAM2Coordinates",
     "StrFormat": "String Format",
     "StrFormatAdv": "String Format (Advanced)",
