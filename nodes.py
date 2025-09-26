@@ -8,6 +8,68 @@ import torch
 from nodes import MAX_RESOLUTION
 import comfy.samplers
 
+class detailerKSamplerSchedulerFallback:
+    valid_scheduler = comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
+                "fallback_scheduler": (cls.valid_scheduler,),
+            },
+        }
+    
+    RETURN_TYPES = (valid_scheduler,)
+    RETURN_NAMES = ("SCHEDULER",)
+    FUNCTION = "main"
+    CATEGORY = "utils"
+    
+    def main(self, scheduler, fallback_scheduler):
+        if scheduler not in self.valid_scheduler:
+            return (fallback_scheduler,)
+        return(scheduler,)
+
+class effKSamplerSchedulerFallback:
+    valid_scheduler = comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
+                "fallback_scheduler": (cls.valid_scheduler,),
+            },
+        }
+    
+    RETURN_TYPES = (valid_scheduler,)
+    RETURN_NAMES = ("SCHEDULER",)
+    FUNCTION = "main"
+    CATEGORY = "utils"
+    
+    def main(self, scheduler, fallback_scheduler):
+        if scheduler not in self.valid_scheduler:
+            return (fallback_scheduler,)
+        return(scheduler,)
+
+class KSamplerSchedulerFallback:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
+                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
+            },
+        }
+    
+    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS,)
+    RETURN_NAMES = ("SCHEDULER",)
+    FUNCTION = "main"
+    CATEGORY = "utils"
+    
+    def main(self, scheduler, fallback_scheduler):
+        if scheduler not in comfy.samplers.KSampler.SCHEDULERS:
+            return (fallback_scheduler,)
+        return(scheduler,)
+
 class KSamplerConfig:
     @classmethod
     def INPUT_TYPES(cls):
@@ -26,7 +88,7 @@ class KSamplerConfig:
                     "step": 0.5,
                 }),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS,),
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
             },
         }
     
@@ -262,6 +324,9 @@ class CSVRandomPickerAdv:
         return (result,)
 
 NODE_CLASS_MAPPINGS = {
+    "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
+    "effKSamplerSchedulerFallback": effKSamplerSchedulerFallback,
+    "KSamplerSchedulerFallback": KSamplerSchedulerFallback,
     "KSamplerConfig": KSamplerConfig,
     "MaskToSAMCoords": MaskToSAMCoords,
     "StrFormat": StrFormat,
@@ -271,6 +336,9 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "detailerKSamplerSchedulerFallback": "Scheduler Fallback (Detailer)",
+    "effKSamplerSchedulerFallback": "Scheduler Fallback (Efficient)",
+    "KSamplerSchedulerFallback": "Scheduler Fallback (KSampler)",
     "KSamplerConfig": "KSampler Config",
     "MaskToSAMCoords": "Mask to SAM2Coordinates",
     "StrFormat": "String Format",
