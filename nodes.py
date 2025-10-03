@@ -4,27 +4,39 @@ import cv2
 import random
 import json
 import torch
+import os
 
 from nodes import MAX_RESOLUTION
 import comfy.samplers
+
+RES4 = False
+plugin_path = os.path.join(os.path.dirname(__file__), "..", "RES4LYF")
+if os.path.exists(plugin_path):
+    RES4 = True
+
+def get_schedulers(remove = []):
+    schedulers = comfy.samplers.KSampler.SCHEDULERS
+    if RES4:
+        schedulers = list(dict.fromkeys(comfy.samplers.KSampler.SCHEDULERS + ['bong_tangent', 'beta57']))
+    return [x for x in schedulers if x not in remove]
 
 class detailerKSamplerSchedulerFallback:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
-                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
+                "scheduler": (get_schedulers(), {"forceInput": True}),
+                "fallback_scheduler": (get_schedulers(['beta57']) + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
             },
         }
     
-    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],)
+    RETURN_TYPES = get_schedulers(['beta57']) + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
     CATEGORY = "utils"
     
     def main(self, scheduler, fallback_scheduler):
-        if scheduler not in comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']:
+        if scheduler not in get_schedulers(['beta57']) + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']:
             return (fallback_scheduler,)
         return(scheduler,)
 
@@ -33,18 +45,18 @@ class effKSamplerSchedulerFallback:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
-                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],),
+                "scheduler": (get_schedulers(), {"forceInput": True}),
+                "fallback_scheduler": (get_schedulers(['bong_tangent', 'beta57']) + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],),
             },
         }
     
-    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],)
+    RETURN_TYPES = get_schedulers(['bong_tangent', 'beta57']) + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
     CATEGORY = "utils"
     
     def main(self, scheduler, fallback_scheduler):
-        if scheduler not in comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]:
+        if scheduler not in get_schedulers(['bong_tangent', 'beta57']) + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]:
             return (fallback_scheduler,)
         return(scheduler,)
 
@@ -53,18 +65,18 @@ class KSamplerSchedulerFallback:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
-                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
+                "scheduler": (get_schedulers(), {"forceInput": True}),
+                "fallback_scheduler": (get_schedulers(),),
             },
         }
     
-    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS,)
+    RETURN_TYPES = get_schedulers(),
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
     CATEGORY = "utils"
     
     def main(self, scheduler, fallback_scheduler):
-        if scheduler not in comfy.samplers.KSampler.SCHEDULERS:
+        if scheduler not in get_schedulers():
             return (fallback_scheduler,)
         return(scheduler,)
 
@@ -90,8 +102,7 @@ class KSamplerConfig:
             },
         }
     
-    RETURN_TYPES = ("INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS,
-                                    comfy.samplers.KSampler.SCHEDULERS)
+    RETURN_TYPES = ("INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, get_schedulers())
     RETURN_NAMES = ("STEPS", "CFG", "SAMPLER", "SCHEDULER")
     FUNCTION = "main"
     CATEGORY = "utils"
