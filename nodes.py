@@ -9,44 +9,42 @@ from nodes import MAX_RESOLUTION
 import comfy.samplers
 
 class detailerKSamplerSchedulerFallback:
-    valid_scheduler = comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
-                "fallback_scheduler": (cls.valid_scheduler,),
+                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],),
             },
         }
     
-    RETURN_TYPES = (valid_scheduler,)
+    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],)
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
     CATEGORY = "utils"
     
     def main(self, scheduler, fallback_scheduler):
-        if scheduler not in self.valid_scheduler:
+        if scheduler not in comfy.samplers.KSampler.SCHEDULERS + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']:
             return (fallback_scheduler,)
         return(scheduler,)
 
 class effKSamplerSchedulerFallback:
-    valid_scheduler = comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"forceInput": True}),
-                "fallback_scheduler": (cls.valid_scheduler,),
+                "fallback_scheduler": (comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],),
             },
         }
     
-    RETURN_TYPES = (valid_scheduler,)
+    RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],)
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
     CATEGORY = "utils"
     
     def main(self, scheduler, fallback_scheduler):
-        if scheduler not in self.valid_scheduler:
+        if scheduler not in comfy.samplers.KSampler.SCHEDULERS + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]:
             return (fallback_scheduler,)
         return(scheduler,)
 
