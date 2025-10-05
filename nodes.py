@@ -123,7 +123,7 @@ class MaskToSAMCoords:
                 "mask": ("MASK",),
                 "threshold": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "max_regions": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
-                "points_per_region": ("INT", {"default": 5, "min": 1, "max": 100, "step": 1})
+                "points_per_region": ("INT", {"default": 2, "min": 1, "max": 100, "step": 1})
             }
         }
     
