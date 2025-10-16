@@ -172,14 +172,17 @@ class MaskToSAMCoordsV2:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mask": ("MASK",),
+                "mask": ("MASK", {"tooltip": "Mark on the mask to generate positive conditions."}),
                 "threshold": ("FLOAT", {"default": 0.65, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "max_regions": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
                 "points_per_region": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
-                "negative_color": (["red", "green", "blue", "magenta"], {"default": "red"}),
+                "negative_color": (["red", "green", "blue", "magenta"], {
+                    "default": "red",
+                    "tooltip": "red=#FF0000, green=#00FF00, blue=#0000FF, magenta=#FF00FF."
+                }),
             },
             "optional": {
-                "image": ("IMAGE",)
+                "image": ("IMAGE", {"tooltip": "Mark the image using a colored brush to generate negative conditions."})
             }
         }
     
