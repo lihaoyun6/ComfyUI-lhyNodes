@@ -121,9 +121,9 @@ class MaskToSAMCoords:
         return {
             "required": {
                 "mask": ("MASK",),
-                "threshold": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "threshold": ("FLOAT", {"default": 0.65, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "max_regions": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
-                "points_per_region": ("INT", {"default": 2, "min": 1, "max": 100, "step": 1})
+                "points_per_region": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1})
             }
         }
     
@@ -166,6 +166,87 @@ class MaskToSAMCoords:
         coords_str = json.dumps(coords)
         
         return (coords_str,)
+    
+class MaskToSAMCoordsV2:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "mask": ("MASK",),
+                "threshold": ("FLOAT", {"default": 0.65, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "max_regions": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1}),
+                "points_per_region": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
+                "negative_color": (["red", "green", "blue", "magenta"], {"default": "red"}),
+            },
+            "optional": {
+                "image": ("IMAGE",)
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING",)
+    RETURN_NAMES = ("coordinates_positive", "coordinates_negative",)
+    FUNCTION = "convert"
+    CATEGORY = "mask"
+    
+    def convert(self, mask: torch.Tensor, threshold, max_regions, points_per_region, negative_color, image: torch.Tensor = None):
+        color_map = {
+            "red": np.array([0, 0, 255]),
+            "green": np.array([0, 255, 0]),
+            "blue": np.array([255, 0, 0]),
+            "magenta": np.array([255, 0, 255])
+        }
+        neg_color = color_map.get(negative_color, np.array([0, 0, 255]))
+        
+        mask_np = mask[0].cpu().numpy()
+        
+        min_val, max_val = mask_np.min(), mask_np.max()
+        if max_val <= min_val:
+            print("Warning: MaskToSAMCoords received a solid color mask. Returning default coordinate (0,0).")
+            positive_coords = [{"x": 0, "y": 0}]
+        else:
+            normalized_mask = (mask_np - min_val) / (max_val - min_val)
+            binary_mask = (normalized_mask > threshold).astype(np.uint8) * 255
+            contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            positive_coords = []
+            for cnt in contours[:max_regions]:
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w <= 0 or h <= 0:
+                    continue
+                
+                for _ in range(points_per_region):
+                    px = random.randint(x, x + w - 1)
+                    py = random.randint(y, y + h - 1)
+                    if cv2.pointPolygonTest(cnt, (float(px), float(py)), False) >= 0:
+                        positive_coords.append({"x": int(px), "y": int(py)})
+                        
+            if not positive_coords:
+                print("Warning: MaskToSAMCoords did not find any positive regions above the threshold. Returning default coordinate (0,0).")
+                positive_coords.append({"x": 0, "y": 0})
+                
+        positive_coords_str = json.dumps(positive_coords)
+        
+        negative_coords = []
+        if image is not None:
+            img_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            red_mask = cv2.inRange(img_bgr, neg_color, neg_color)
+            contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            for cnt in contours[:max_regions]:
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w <= 0 or h <= 0:
+                    continue
+                
+                for _ in range(points_per_region):
+                    px = random.randint(x, x + w - 1)
+                    py = random.randint(y, y + h - 1)
+                    if cv2.pointPolygonTest(cnt, (float(px), float(py)), False) >= 0:
+                        negative_coords.append({"x": int(px), "y": int(py)})
+                        
+        negative_coords_str = json.dumps(negative_coords)
+        
+        return (positive_coords_str, negative_coords_str)
 
 class StrFormat:
     @classmethod
@@ -338,6 +419,7 @@ NODE_CLASS_MAPPINGS = {
     "KSamplerSchedulerFallback": KSamplerSchedulerFallback,
     "KSamplerConfig": KSamplerConfig,
     "MaskToSAMCoords": MaskToSAMCoords,
+    "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
     "StrFormat": StrFormat,
     "StrFormatAdv": StrFormatAdv,
     "CSVRandomPicker": CSVRandomPicker,
@@ -349,7 +431,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "effKSamplerSchedulerFallback": "Scheduler Fallback (Efficient)",
     "KSamplerSchedulerFallback": "Scheduler Fallback (KSampler)",
     "KSamplerConfig": "KSampler Config",
-    "MaskToSAMCoords": "Mask to SAM2Coordinates",
+    "MaskToSAMCoords": "Mask to Coordinates (SAM2)",
+    "MaskToSAMCoordsV2": "Mask to Coordinates V2 (SAM2)",
     "StrFormat": "String Format",
     "StrFormatAdv": "String Format (Advanced)",
     "CSVRandomPicker": "CSV RandomPicker",
