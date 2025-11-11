@@ -442,11 +442,11 @@ class YoloFaceReformer:
         
         for i, result in enumerate(results):
             if len(result.boxes) > 0 or i == 0:
-                faces.append(images[i])
+                faces.append(images[i].unsqueeze(0))
             else:
                 faces.append(faces[-1])
-                
-        return (torch.cat(faces, dim=0),)
+        final_faces = torch.cat(faces, dim=0)
+        return (final_faces,)
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
