@@ -7,10 +7,12 @@ import torch
 import os
 
 from nodes import MAX_RESOLUTION
+from ultralytics import YOLO
 import comfy.samplers
 
 RES4 = False
-plugin_path = os.path.join(os.path.dirname(__file__), "..", "RES4LYF")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+plugin_path = os.path.join(current_dir, "..", "RES4LYF")
 if os.path.exists(plugin_path):
     RES4 = True
 
@@ -416,6 +418,36 @@ class CSVRandomPickerAdv:
         result = output_separator.join(selected_items)
         return (result,)
 
+class YoloFaceReformer:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE", ),
+                "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
+    FUNCTION = "process"
+    CATEGORY = "lhyNode\WanAnimate"
+    DESCRIPTION = "Automatically reuse the previous detected face when none is found in any frame."
+    
+    def process(self, images, threshold):
+        faces = []
+        model = YOLO(os.path.join(current_dir, "models", "yolov8n-face.pt"))
+        images_bchw = images.permute(0, 3, 1, 2)
+        results = model(images_bchw, conf=threshold, verbose=False)
+        
+        for i, result in enumerate(results):
+            if len(result.boxes) > 0 or i == 0:
+                faces.append(images[i])
+            else:
+                faces.append(faces[-1])
+                
+        return (faces,)
+
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
     "effKSamplerSchedulerFallback": effKSamplerSchedulerFallback,
@@ -427,6 +459,7 @@ NODE_CLASS_MAPPINGS = {
     "StrFormatAdv": StrFormatAdv,
     "CSVRandomPicker": CSVRandomPicker,
     "CSVRandomPickerAdv": CSVRandomPickerAdv,
+    "YoloFaceReformer": YoloFaceReformer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -440,4 +473,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StrFormatAdv": "String Format (Advanced)",
     "CSVRandomPicker": "CSV RandomPicker",
     "CSVRandomPickerAdv": "CSV RandomPicker (Advanced)",
+    "YoloFaceReformer": "WanAnimate Face Reformer",
 }
