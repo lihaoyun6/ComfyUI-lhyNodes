@@ -446,7 +446,7 @@ class YoloFaceReformer:
             else:
                 faces.append(faces[-1])
                 
-        return (faces,)
+        return (torch.cat(faces, dim=0),)
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
