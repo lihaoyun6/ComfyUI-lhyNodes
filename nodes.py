@@ -424,7 +424,7 @@ class YoloFaceReformer:
         return {
             "required": {
                 "images": ("IMAGE", ),
-                "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "threshold": ("FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
     
