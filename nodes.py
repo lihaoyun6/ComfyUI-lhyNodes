@@ -432,7 +432,7 @@ class YoloFaceReformer:
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
     CATEGORY = "lhyNode\WanAnimate"
-    DESCRIPTION = "Automatically reuse the previous detected face when none is found in any frame."
+    DESCRIPTION = "Automatically reuse the previous detected face when none is found in current frame."
     
     def process(self, images, threshold):
         faces = []
@@ -448,6 +448,31 @@ class YoloFaceReformer:
         final_faces = torch.cat(faces, dim=0)
         return (final_faces,)
 
+class PoseReformer:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE", ),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
+    FUNCTION = "process"
+    CATEGORY = "lhyNode\WanAnimate"
+    DESCRIPTION = "Automatically reuse the previous detected pose when none is found in current frame."
+    
+    def process(self, images):
+        poses = []
+        for i, image in enumerate(images):
+            if torch.max(image) != 0.0 or i == 0:
+                poses.append(image.unsqueeze(0))
+            else:
+                poses.append(poses[-1])
+        final_poses = torch.cat(poses, dim=0)
+        return (final_poses,)
+
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
     "effKSamplerSchedulerFallback": effKSamplerSchedulerFallback,
@@ -460,6 +485,7 @@ NODE_CLASS_MAPPINGS = {
     "CSVRandomPicker": CSVRandomPicker,
     "CSVRandomPickerAdv": CSVRandomPickerAdv,
     "YoloFaceReformer": YoloFaceReformer,
+    "PoseReformer": PoseReformer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -474,4 +500,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CSVRandomPicker": "CSV RandomPicker",
     "CSVRandomPickerAdv": "CSV RandomPicker (Advanced)",
     "YoloFaceReformer": "WanAnimate Face Reformer",
+    "PoseReformer": "WanAnimate Pose Reformer",
 }
