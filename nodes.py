@@ -425,28 +425,56 @@ class YoloFaceReformer:
             "required": {
                 "images": ("IMAGE", ),
                 "threshold": ("FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "batch_size": ("INT", {"default": 32, "min": 1, "max": 1024, "step": 1}),
             }
         }
     
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode\WanAnimate"
-    DESCRIPTION = "Automatically reuse the previous detected face when none is found in current frame."
+    CATEGORY = "lhyNode/WanAnimate"
+    DESCRIPTION = "Automatically reuse the previous detected face when none is found. Optimized for large inputs via batching."
     
-    def process(self, images, threshold):
-        faces = []
+    def process(self, images, threshold, batch_size):
         model = YOLO(os.path.join(current_dir, "models", "yolov8n-face.pt"))
-        images_bchw = images.permute(0, 3, 1, 2)
-        results = model(images_bchw, conf=threshold, verbose=False)
         
-        for i, result in enumerate(results):
-            if len(result.boxes) > 0 or i == 0:
-                faces.append(images[i].unsqueeze(0))
-            else:
-                faces.append(faces[-1])
-        final_faces = torch.cat(faces, dim=0)
-        return (final_faces,)
+        invalid_face = 0
+        total_frames = images.shape[0]
+        processed_faces = []
+        pbar = comfy.utils.ProgressBar(total_frames)
+        
+        print(f"YoloFaceReformer: Processing {total_frames} frames in batches of {batch_size}...")
+        for i in range(0, total_frames, batch_size):
+            batch_start = i
+            batch_end = min(i + batch_size, total_frames)
+            image_batch = images[batch_start:batch_end]
+            
+            current_batch_number = (i // batch_size) + 1
+            images_bchw_batch = image_batch.permute(0, 3, 1, 2)
+            results_batch = model(images_bchw_batch, conf=threshold, verbose=False)
+            
+            for j, result in enumerate(results_batch):
+                current_frame_index = batch_start + j
+                has_detection = len(result.boxes) > 0
+                
+                if has_detection:
+                    frame_to_add = images[current_frame_index]
+                else:
+                    invalid_face += 1
+                    if not processed_faces:
+                        frame_to_add = images[current_frame_index]
+                    else:
+                        frame_to_add = processed_faces[-1]
+                        
+                processed_faces.append(frame_to_add)
+                pbar.update(1)
+                
+        if not processed_faces:
+            return (torch.zeros_like(images)[:0],)
+        
+        print(f"Discarded {invalid_face} invalid face frames.")
+        final_faces_batch = torch.stack(processed_faces, dim=0)
+        return (final_faces_batch,)
 
 class PoseReformer:
     @classmethod
@@ -460,7 +488,7 @@ class PoseReformer:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode\WanAnimate"
+    CATEGORY = "lhyNode/WanAnimate"
     DESCRIPTION = "Automatically reuse the previous detected pose when none is found in current frame."
     
     def process(self, images):
