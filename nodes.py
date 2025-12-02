@@ -35,7 +35,7 @@ class detailerKSamplerSchedulerFallback:
     RETURN_TYPES = get_schedulers(['beta57']) + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma'],
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
-    CATEGORY = "utils"
+    CATEGORY = "lhyNodes/Utils"
     
     def main(self, scheduler, fallback_scheduler):
         if scheduler not in get_schedulers(['beta57']) + ['AYS SDXL', 'AYS SD1', 'AYS SVD', 'GITS[coeff=1.2]', 'LTXV[default]', 'OSS FLUX', 'OSS Wan', 'OSS Chroma']:
@@ -55,7 +55,7 @@ class effKSamplerSchedulerFallback:
     RETURN_TYPES = get_schedulers(['bong_tangent', 'beta57']) + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"],
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
-    CATEGORY = "utils"
+    CATEGORY = "lhyNodes/Utils"
     
     def main(self, scheduler, fallback_scheduler):
         if scheduler not in get_schedulers(['bong_tangent', 'beta57']) + ["AYS SD1", "AYS SDXL", "AYS SVD", "GITS"]:
@@ -75,7 +75,7 @@ class KSamplerSchedulerFallback:
     RETURN_TYPES = get_schedulers(),
     RETURN_NAMES = ("SCHEDULER",)
     FUNCTION = "main"
-    CATEGORY = "utils"
+    CATEGORY = "lhyNodes/Utils"
     
     def main(self, scheduler, fallback_scheduler):
         if scheduler not in get_schedulers():
@@ -107,7 +107,7 @@ class KSamplerConfig:
     RETURN_TYPES = ("INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, get_schedulers())
     RETURN_NAMES = ("STEPS", "CFG", "SAMPLER", "SCHEDULER")
     FUNCTION = "main"
-    CATEGORY = "utils"
+    CATEGORY = "lhyNodes/Utils"
     
     def main(self, steps_total, cfg, sampler_name, scheduler):
         return (
@@ -132,7 +132,7 @@ class MaskToSAMCoords:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("coordinates",)
     FUNCTION = "convert"
-    CATEGORY = "mask"
+    CATEGORY = "lhyNodes/Mask"
     
     def convert(self, mask: torch.Tensor, threshold, max_regions, points_per_region):
         mask_np = mask[0].cpu().numpy()
@@ -191,7 +191,7 @@ class MaskToSAMCoordsV2:
     RETURN_TYPES = ("STRING", "STRING",)
     RETURN_NAMES = ("coordinates_positive", "coordinates_negative",)
     FUNCTION = "convert"
-    CATEGORY = "mask"
+    CATEGORY = "lhyNodes/Mask"
     
     def convert(self, mask: torch.Tensor, threshold, max_regions, points_per_region, negative_color, image: torch.Tensor = None):
         color_map = {
@@ -271,7 +271,7 @@ class StrFormat:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("string",)
     FUNCTION = "main"
-    CATEGORY = 'utils/mxToolkit'
+    CATEGORY = 'lhyNodes/String'
     
     def main(self, format, value1, value2, value3, value4, value5, value6):
         return (format.format(value1, value2, value3, value4, value5, value6),)
@@ -300,7 +300,7 @@ class StrFormatAdv:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("string",)
     FUNCTION = "main"
-    CATEGORY = 'utils/mxToolkit'
+    CATEGORY = 'lhyNodes/String'
     
     def main(self, format, value1, switch1, value2, switch2, value3, switch3, value4, switch4, value5, switch5, value6, switch6):
         v1 = value1 if switch1 else ""
@@ -338,7 +338,7 @@ class CSVRandomPicker:
     
     RETURN_TYPES = ("STRING",)
     FUNCTION = "pick_random_items"
-    CATEGORY = "Custom/Utils"
+    CATEGORY = "lhyNodes/String"
     
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
@@ -393,7 +393,7 @@ class CSVRandomPickerAdv:
     
     RETURN_TYPES = ("STRING",)
     FUNCTION = "pick_random_items"
-    CATEGORY = "Custom/Utils"
+    CATEGORY = "lhyNodes/String"
     
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
