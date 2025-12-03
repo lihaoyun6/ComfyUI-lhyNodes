@@ -41,7 +41,8 @@ class ImageBatchtoImages:
                 "height": ("INT", {"default": 512}),
                 "interpolation": (["nearest", "bilinear", "bicubic", "lanczos"],),
                 "mothed": (["crop (center)", "resize (stretch)", "pad (fill)", "pad (edge)"],),
-                "fill_color": ("STRING", {"default": "0,0,0,255"},),
+                "transparency": ("BOOLEAN", {"default": False},),
+                "fill_color": ("COLORCODE", {"default": "#000000"}),
             },
         }
     
@@ -50,7 +51,7 @@ class ImageBatchtoImages:
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Image"
     
-    def convert(self, image_batch, width, height, interpolation, mothed, fill_color):
+    def convert(self, image_batch, width, height, interpolation, mothed, transparency, fill_color):
         image_list = []
         mask_list = []
         
@@ -65,25 +66,22 @@ class ImageBatchtoImages:
             _interpolation = interpolation_map[interpolation]
         except:
             _interpolation = Image.LANCZOS
-            
-        try:
-            color = tuple(map(int, fill_color.strip().split(",")))
-        except:
-            color = (0,0,0)
-        if len(color) < 3:
-            color = (0,0,0)
         
         for _img in image_batch:
-            img = _img.convert('RGBA')
-            processed_img = img
+            hex_color = fill_color.lstrip("#")
+            alpha = 0 if transparency else 255
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
             
+            img = _img.copy().convert('RGBA') if transparency else _img.copy().convert('RGB')
+            processed_img = img
+
             if img.size != (width, height):
                 if mothed == "resize (stretch)":
                     processed_img = img.resize((width, height), _interpolation)
                 elif mothed == "crop (center)":
                     processed_img = ImageOps.fit(img, (width, height), method=_interpolation, centering=(0.5, 0.5))
                 elif mothed == "pad (fill)":
-                    processed_img = ImageOps.pad(img, (width, height), method=_interpolation, color=color, centering=(0.5, 0.5))
+                    processed_img = ImageOps.pad(img, (width, height), method=_interpolation, color=(r, g, b, alpha), centering=(0.5, 0.5))
                 elif mothed == "pad (edge)":
                     ratio = min(width / img.width, height / img.height)
                     new_size = (int(img.width * ratio), int(img.height * ratio))
