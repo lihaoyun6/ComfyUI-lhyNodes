@@ -8,6 +8,7 @@ from PIL import Image, ImageOps
 from PIL.PngImagePlugin import PngInfo
 
 import folder_paths
+from .utils import cqdm
 
 class ImageBatchtoImageList:
     @classmethod
@@ -174,7 +175,7 @@ class SaveImageAsZip:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "images": ("IMAGE", ),
+                "image": ("IMAGE", ),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
                 "save_metadata": ("BOOLEAN", {"default": True}),
             },
@@ -186,10 +187,10 @@ class SaveImageAsZip:
     RETURN_TYPES = ()
     FUNCTION = "save_zip"
     OUTPUT_NODE = True
-    CATEGORY = "lhyNodes/Image"
+    CATEGORY = "lhyNodes/File"
     
-    def save_zip(self, images, filename_prefix, save_metadata, prompt=None, extra_pnginfo=None):
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
+    def save_zip(self, image, filename_prefix, save_metadata, prompt=None, extra_pnginfo=None):
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, image[0].shape[1], image[0].shape[0])
         
         zip_filename = f"{filename}_{counter:05}_.zip"
         zip_path = os.path.join(full_output_folder, zip_filename)
@@ -198,8 +199,8 @@ class SaveImageAsZip:
         compression = zipfile.ZIP_DEFLATED if 'zlib' in zipfile.sys.modules else zipfile.ZIP_STORED
         
         with zipfile.ZipFile(zip_path, 'w', compression=compression) as zf:
-            for i, image in enumerate(images):
-                i_np = 255. * image.cpu().numpy()
+            for i, _image in enumerate(cqdm(image)):
+                i_np = 255. * _image.cpu().numpy()
                 img = Image.fromarray(np.clip(i_np, 0, 255).astype(np.uint8))
                 img_byte_arr = io.BytesIO()
                 
@@ -213,9 +214,126 @@ class SaveImageAsZip:
                             metadata.add_text(x, json.dumps(extra_pnginfo[x]))
                 
                 img.save(img_byte_arr, pnginfo=metadata, format='PNG', compress_level=self.compress_level)
-                file_in_zip_name = f"{filename}_{counter:05}_{i:04}.png"
-                zf.writestr(file_in_zip_name, img_byte_arr.getvalue())
+                zf.writestr(f"{i:05}.png", img_byte_arr.getvalue())
 
+        return {
+            "ui": {
+                "zip_filename": [zip_filename],
+                "subfolder": [subfolder],
+                "type": [self.type]
+            }
+        }
+
+class SaveTextAsZip:
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
+        self.type = "output"
+        
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"forceInput": True}),
+                "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+            },
+        }
+    
+    RETURN_TYPES = ()
+    FUNCTION = "save_zip"
+    OUTPUT_NODE = True
+    CATEGORY = "lhyNodes/File"
+    
+    def save_zip(self, text, filename_prefix):
+        if isinstance(text, str):
+            text = [text]
+        elif isinstance(text, list) and all(isinstance(i, str) for i in text):
+            pass
+        else:
+            raise ValueError(f"Unknown input format! The input must be a String or [String].")
+        
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, 100, 100)
+        
+        zip_filename = f"{filename}_{counter:05}_.zip"
+        zip_path = os.path.join(full_output_folder, zip_filename)
+        
+        print(f"Saving Zip to: {zip_path}")
+        compression = zipfile.ZIP_DEFLATED if 'zlib' in zipfile.sys.modules else zipfile.ZIP_STORED
+        
+        with zipfile.ZipFile(zip_path, 'w', compression=compression) as zf:
+            for i, txt in enumerate(cqdm(text)):
+                zf.writestr(f"{i:05}.txt", str(txt))
+                
+        return {
+            "ui": {
+                "zip_filename": [zip_filename],
+                "subfolder": [subfolder],
+                "type": [self.type]
+            }
+        }
+
+class SaveITAsZip:
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
+        self.type = "output"
+        self.compress_level = 4
+        
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE", ),
+                "text": ("STRING", {"forceInput": True}),
+                "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+                "save_metadata": ("BOOLEAN", {"default": True}),
+            },
+            "hidden": {
+                "prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"
+            },
+        }
+    
+    RETURN_TYPES = ()
+    FUNCTION = "save_zip"
+    OUTPUT_NODE = True
+    CATEGORY = "lhyNodes/File"
+    
+    def save_zip(self, image, text, filename_prefix, save_metadata, prompt=None, extra_pnginfo=None):
+        if isinstance(text, str):
+            text = [text]
+        elif isinstance(text, list) and all(isinstance(i, str) for i in text):
+            pass
+        else:
+            raise ValueError(f"Unknown input format! The input must be a String or [String].")
+        
+        if len(image) != len(text):
+            raise ValueError(f"Images and Text must have the same length!")
+            
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, image[0].shape[1], image[0].shape[0])
+        
+        zip_filename = f"{filename}_{counter:05}_.zip"
+        zip_path = os.path.join(full_output_folder, zip_filename)
+        
+        print(f"Saving Zip to: {zip_path}")
+        compression = zipfile.ZIP_DEFLATED if 'zlib' in zipfile.sys.modules else zipfile.ZIP_STORED
+        
+        with zipfile.ZipFile(zip_path, 'w', compression=compression) as zf:
+            for i, _image in enumerate(cqdm(image)):
+                i_np = 255. * _image.cpu().numpy()
+                img = Image.fromarray(np.clip(i_np, 0, 255).astype(np.uint8))
+                img_byte_arr = io.BytesIO()
+                
+                metadata = None
+                if save_metadata:
+                    metadata = PngInfo()
+                    if prompt is not None:
+                        metadata.add_text("prompt", json.dumps(prompt))
+                    if extra_pnginfo is not None:
+                        for x in extra_pnginfo:
+                            metadata.add_text(x, json.dumps(extra_pnginfo[x]))
+                            
+                img.save(img_byte_arr, pnginfo=metadata, format='PNG', compress_level=self.compress_level)
+                zf.writestr(f"{i:05}.png", img_byte_arr.getvalue())
+                zf.writestr(f"{i:05}.txt", str(text[i]))
+                
         return {
             "ui": {
                 "zip_filename": [zip_filename],
@@ -302,6 +420,8 @@ class LoadZipBatch:
 NODE_CLASS_MAPPINGS = {
     "LoadImageBatch": LoadImageBatch,
     "SaveImageAsZip": SaveImageAsZip,
+    "SaveTextAsZip": SaveTextAsZip,
+    "SaveITAsZip": SaveITAsZip,
     "LoadZipBatch": LoadZipBatch,
     "ImageBatchtoImages": ImageBatchtoImages,
     "ImageBatchtoImageList": ImageBatchtoImageList
@@ -310,6 +430,8 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadImageBatch": "Load Image Batch",
     "SaveImageAsZip": "Save Image as Zip",
+    "SaveTextAsZip": "Save Text as Zip",
+    "SaveITAsZip": "Save Image and Text as Zip",
     "LoadZipBatch": "Load Zip",
     "ImageBatchtoImages": "Image Batch to Images",
     "ImageBatchtoImageList": "Image Batch to Image List"
