@@ -432,7 +432,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveImageAsZip": "Save Image as Zip",
     "SaveTextAsZip": "Save Text as Zip",
     "SaveITAsZip": "Save Image and Text as Zip",
-    "LoadZipBatch": "Load Zip",
+    "LoadZipBatch": "Load Image from Zip",
     "ImageBatchtoImages": "Image Batch to Images",
     "ImageBatchtoImageList": "Image Batch to Image List"
 }
