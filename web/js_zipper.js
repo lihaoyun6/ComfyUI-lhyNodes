@@ -4,7 +4,7 @@ import { api } from "../../scripts/api.js";
 app.registerExtension({
     name: "Comfy.BatchZipper",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name === "SaveImageAsZip"||nodeData.name === "SaveTextAsZip"||nodeData.name === "SaveITAsZip") {
+        if (nodeData.name === "SaveImageAsZip"||nodeData.name === "SaveTextAsZip") {
             const onExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function (message) {
                 const r = onExecuted ? onExecuted.apply(this, arguments) : undefined;

@@ -426,6 +426,7 @@ class YoloFaceReformer:
                 "images": ("IMAGE", ),
                 "threshold": ("FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "batch_size": ("INT", {"default": 32, "min": 1, "max": 1024, "step": 1}),
+                "enabled": ("BOOLEAN", {"default": True, "tooltip": "Whether to process the image sequence."}),
             }
         }
     
@@ -435,7 +436,10 @@ class YoloFaceReformer:
     CATEGORY = "lhyNode/WanAnimate"
     DESCRIPTION = "Automatically reuse the previous detected face when none is found. Optimized for large inputs via batching."
     
-    def process(self, images, threshold, batch_size):
+    def process(self, images, threshold, batch_size, enabled):
+        if not enabled:
+            return (images,)
+        
         model = YOLO(os.path.join(current_dir, "models", "yolov8n-face.pt"))
         
         invalid_face = 0
@@ -482,6 +486,7 @@ class PoseReformer:
         return {
             "required": {
                 "images": ("IMAGE", ),
+                "enabled": ("BOOLEAN", {"default": True, "tooltip": "Whether to process the image sequence."}),
             }
         }
     
@@ -491,7 +496,10 @@ class PoseReformer:
     CATEGORY = "lhyNode/WanAnimate"
     DESCRIPTION = "Automatically reuse the previous detected pose when none is found in current frame."
     
-    def process(self, images):
+    def process(self, images, enabled):
+        if not enabled:
+            return (images,)
+        
         poses = []
         for i, image in enumerate(images):
             if torch.max(image) != 0.0 or i == 0:
