@@ -15,6 +15,12 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 plugin_path = os.path.join(current_dir, "..", "RES4LYF")
 if os.path.exists(plugin_path):
     RES4 = True
+    
+class AnyType(str):
+    def __ne__(self, __value: object) -> bool:
+        return False
+    
+any_type = AnyType("*")
 
 def get_schedulers(remove = []):
     schedulers = comfy.samplers.KSampler.SCHEDULERS
@@ -509,6 +515,41 @@ class PoseReformer:
         final_poses = torch.cat(poses, dim=0)
         return (final_poses,)
 
+class CudaDevicePatcher:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "device": ("STRING", {"default": ""}),
+            }
+        }
+    
+    RETURN_TYPES = (any_type, "STRING")
+    RETURN_NAMES = ("any", "original")
+    OUTPUT_NODE = True
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/utils"
+    
+    def main(self, any, device):
+        ori = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        os.environ["CUDA_VISIBLE_DEVICES"] = device
+        print(f'[CUDA_VISIBLE_DEVICES] set to "{device}"')
+        return (any, ori)
+
+class noneNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("None",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/utils"
+    
+    def main(self):
+        return (None,)
+
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
     "effKSamplerSchedulerFallback": effKSamplerSchedulerFallback,
@@ -522,6 +563,8 @@ NODE_CLASS_MAPPINGS = {
     "CSVRandomPickerAdv": CSVRandomPickerAdv,
     "YoloFaceReformer": YoloFaceReformer,
     "PoseReformer": PoseReformer,
+    "CudaDevicePatcher": CudaDevicePatcher,
+    "noneNode": noneNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -537,4 +580,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CSVRandomPickerAdv": "CSV RandomPicker (Advanced)",
     "YoloFaceReformer": "WanAnimate Face Reformer",
     "PoseReformer": "WanAnimate Pose Reformer",
+    "noneNode": "None",
 }
