@@ -580,5 +580,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CSVRandomPickerAdv": "CSV RandomPicker (Advanced)",
     "YoloFaceReformer": "WanAnimate Face Reformer",
     "PoseReformer": "WanAnimate Pose Reformer",
+    "CudaDevicePatcher": "Set Cuda Device",
     "noneNode": "None",
 }
