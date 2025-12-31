@@ -549,6 +549,24 @@ class noneNode:
     
     def main(self):
         return (None,)
+    
+class queueHandler:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "trigger": (any_type,),
+                "any": (any_type,),
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("any",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/utils"
+    
+    def main(self, trigger, any):
+        return (any,)
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
@@ -565,6 +583,7 @@ NODE_CLASS_MAPPINGS = {
     "PoseReformer": PoseReformer,
     "CudaDevicePatcher": CudaDevicePatcher,
     "noneNode": noneNode,
+    "queueHandler": queueHandler,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -581,5 +600,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "YoloFaceReformer": "WanAnimate Face Reformer",
     "PoseReformer": "WanAnimate Pose Reformer",
     "CudaDevicePatcher": "Set Cuda Device",
-    "noneNode": "None",
+    "queueHandler": "Queue Handler",
 }
