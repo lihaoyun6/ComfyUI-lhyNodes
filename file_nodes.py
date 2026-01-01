@@ -183,24 +183,27 @@ class SaveImageAsZip:
                 "text": ("STRING", {"forceInput": True}),
             },
             "hidden": {
-                "prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO"
             },
         }
     
     RETURN_TYPES = ()
     FUNCTION = "save_zip"
     OUTPUT_NODE = True
+    INPUT_IS_LIST = True
     CATEGORY = "lhyNodes/File"
     
     def save_zip(self, image, filename_prefix, save_metadata, text=None, prompt=None, extra_pnginfo=None):
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif isinstance(text, list) and all(isinstance(i, str) for i in text):
-                pass
-            else:
-                raise ValueError(f"Unknown input format! The input must be a String or [String].")
+        filename_prefix = filename_prefix[0]
+        save_metadata = save_metadata[0]
+        extra_pnginfo = extra_pnginfo[0]
+        prompt = prompt[0]
+        
+        if len(image) == 1:
+            image = image[0]
             
+        if text is not None:
             if len(image) != len(text):
                 raise ValueError(f"Images and Text must have the same length!")
             
@@ -257,16 +260,11 @@ class SaveTextAsZip:
     RETURN_TYPES = ()
     FUNCTION = "save_zip"
     OUTPUT_NODE = True
+    INPUT_IS_LIST = True
     CATEGORY = "lhyNodes/File"
     
     def save_zip(self, text, filename_prefix):
-        if isinstance(text, str):
-            text = [text]
-        elif isinstance(text, list) and all(isinstance(i, str) for i in text):
-            pass
-        else:
-            raise ValueError(f"Unknown input format! The input must be a String or [String].")
-        
+        filename_prefix = filename_prefix[0]
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, 100, 100)
         
         zip_filename = f"{filename}_{counter:05}_.zip"
