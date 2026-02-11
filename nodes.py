@@ -600,5 +600,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "YoloFaceReformer": "WanAnimate Face Reformer",
     "PoseReformer": "WanAnimate Pose Reformer",
     "CudaDevicePatcher": "Set Cuda Device",
+    "noneNode": "None",
     "queueHandler": "Queue Handler",
 }
