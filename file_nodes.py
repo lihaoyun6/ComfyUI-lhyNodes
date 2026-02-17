@@ -217,7 +217,7 @@ class SaveImageAsZip:
         
         with zipfile.ZipFile(zip_path, 'w', compression=compression) as zf:
             for i, _image in enumerate(cqdm(image)):
-                i_np = 255. * _image.cpu().numpy()
+                i_np = 255. * _image[0].cpu().numpy()
                 img = Image.fromarray(np.clip(i_np, 0, 255).astype(np.uint8))
                 img_byte_arr = io.BytesIO()
                 
