@@ -157,7 +157,7 @@ async def generate_batch_preview_endpoint(request):
 				draw = ImageDraw.Draw(img)
 				text = f"+{total_count - MAX_PREVIEWS + 1}"
 				font_size = int(img.height * 0.2)
-				font = ImageFont.truetype(os.path.join(current_dir, "res","font", "Alibaba-PuHuiTi-Heavy.ttf"), font_size)
+				font = ImageFont.truetype(os.path.join(current_dir, "res","fonts", "Alibaba-PuHuiTi-Heavy.ttf"), font_size)
 			
 				if hasattr(draw, 'textbbox'):
 					bbox = draw.textbbox((0, 0), text, font=font)
