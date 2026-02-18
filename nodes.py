@@ -1007,33 +1007,34 @@ class WanAnimateBestFrameWindow:
         min_w = 57
         max_w = 97
         
-        if force_size > 1: return force_size
-        if frame_count <= min_w: return min_w
+        if force_size > 1:
+            return force_size
+        if frame_count <= min_w:
+            return min_w
         
-        best = None
+        best_window = min_w
+        best_candidate = None
+        
         n_min = math.ceil((min_w - 1) / 4)
         n_max = math.floor((max_w - 1) / 4)
-    
+        
         for n in range(n_min, n_max + 1):
             W = 4 * n + 1
-    
             if W < min_w or W > max_w:
                 continue
-    
+            
             k = math.ceil(frame_count / W)
             padding = k * W - frame_count
             candidate = (padding, k, -W)
-    
-            if best is None or candidate < best[0]:
-                best = (candidate, {
-                    "window": W,
-                    "segments": k,
-                    "padding": padding,
-                })
-    
+            
+            if best_candidate is None or candidate < best_candidate:
+                best_candidate = candidate
+                best_window = W
+                
             if padding == 0:
                 break
-        return (best,)
+            
+        return best_window
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
