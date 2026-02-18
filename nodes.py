@@ -1034,7 +1034,7 @@ class WanAnimateBestFrameWindow:
             if padding == 0:
                 break
             
-        return best_window
+        return (best_window,)
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
