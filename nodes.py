@@ -1008,7 +1008,7 @@ class WanAnimateBestFrameWindow:
         max_w = 97
         
         if force_size > 1: return force_size
-        if frames_count <= min_w: return min_w
+        if frame_count <= min_w: return min_w
         
         best = None
         n_min = math.ceil((min_w - 1) / 4)
@@ -1020,8 +1020,8 @@ class WanAnimateBestFrameWindow:
             if W < min_w or W > max_w:
                 continue
     
-            k = math.ceil(frames / W)
-            padding = k * W - frames
+            k = math.ceil(frame_count / W)
+            padding = k * W - frame_count
             candidate = (padding, k, -W)
     
             if best is None or candidate < best[0]:
