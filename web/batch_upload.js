@@ -11,36 +11,6 @@ function generateUUID() {
     });
 }
 
-async function fetchAndShowPreview(node, batchFolderUUID) {
-    try {
-        const response = await api.fetchApi("/batch_preview/gen_batch", {
-            method: "POST",
-            body: JSON.stringify({ batch_folder: batchFolderUUID }),
-        });
-        
-        if (response.status !== 200) {
-            console.error("Preview generation failed", response.statusText);
-            return;
-        }
-        
-        const imgInfo = await response.json();
-
-        const previewUrl = api.apiURL(
-            `/view?filename=${encodeURIComponent(imgInfo.filename)}&type=${imgInfo.type}&subfolder=${encodeURIComponent(imgInfo.subfolder)}&t=${Date.now()}`
-        );
-
-        const img = new Image();
-        img.onload = () => {
-            node.imgs = [img];
-            app.graph.setDirtyCanvas(true, true);
-        };
-        img.src = previewUrl;
-        
-    } catch (error) {
-        console.error("Error fetching preview:", error);
-    }
-}
-
 async function uploadFilesToBatch(node, files) {
     if (!files || files.length === 0) return;
     
@@ -106,7 +76,16 @@ async function uploadFilesToBatch(node, files) {
         }
         
         if (btn) btn.name = "Generating Preview...";
-        await fetchAndShowPreview(node, uuid, true); 
+        const response = await api.fetchApi("/batch_preview/gen_batch", {
+            method: "POST",
+            body: JSON.stringify({ batch_folder: uuid }),
+        });
+        
+        if (response.status !== 200) {
+            console.error("Preview generation failed", response.statusText);
+            return;
+        }
+        //updatePreview(node);
         console.log(`[BatchUpload] Success: ${uuid}`);
         
     } catch (error) {
