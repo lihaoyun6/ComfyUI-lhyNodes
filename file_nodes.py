@@ -129,7 +129,8 @@ class LoadImageBatch:
 
         return {
             "required": {
-                "batch": (subdirs, ),
+                "append": ("BOOLEAN", {"default": False},),
+                "batch": (subdirs,),
             },
         }
 
@@ -138,7 +139,7 @@ class LoadImageBatch:
     FUNCTION = "process_batch"
     CATEGORY = "lhyNodes/Image"
 
-    def process_batch(self, batch):
+    def process_batch(self, append, batch):
         target_dir = os.path.join(self.batch_dir, batch)
         
         if not os.path.exists(target_dir) or batch == "None":

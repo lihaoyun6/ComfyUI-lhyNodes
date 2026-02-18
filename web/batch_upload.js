@@ -26,7 +26,7 @@ async function fetchAndShowPreview(node, batchFolderUUID) {
         const imgInfo = await response.json();
 
         const previewUrl = api.apiURL(
-            `/view?filename=${encodeURIComponent(imgInfo.filename)}&type=${imgInfo.type}&subfolder=${imgInfo.subfolder}`
+            `/view?filename=${encodeURIComponent(imgInfo.filename)}&type=${imgInfo.type}&subfolder=${encodeURIComponent(imgInfo.subfolder)}&t=${Date.now()}`
         );
 
         const img = new Image();
@@ -43,22 +43,33 @@ async function fetchAndShowPreview(node, batchFolderUUID) {
 
 async function uploadFilesToBatch(node, files) {
     if (!files || files.length === 0) return;
-
+    
     const validFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
     if (validFiles.length === 0) {
         console.log("No valid image files found.");
         return;
     }
-
-    const uuid = generateUUID();
-    const subfolderName = "batch/" + uuid;
     
+    const appendWidget = node.widgets.find(w => w.name === "append");
+    const batchWidget = node.widgets.find(w => w.name === "batch");
+    
+    let uuid;
+    const isAppend = appendWidget ? appendWidget.value : false;
+    const currentBatch = batchWidget ? batchWidget.value : "None";
+    
+    if (isAppend && currentBatch !== "None" && currentBatch !== "") {
+        uuid = currentBatch;
+        console.log(`[BatchUpload] Appending files to existing batch: ${uuid}`);
+    } else {
+        uuid = generateUUID();
+        console.log(`[BatchUpload] Creating new batch: ${uuid}`);
+    }
+    
+    const subfolderName = "batch/" + uuid;
     const btn = node.widgets.find(w => w.type === "button");
-    const originalLabel = btn ? btn.name : "Upload";
+    const originalLabel = btn.name;
     if (btn) btn.name = `Uploading ${validFiles.length} files...`;
     
-    console.log(`[BatchUpload] Starting upload to input/${subfolderName}`);
-
     try {
         const promises = validFiles.map(async (file) => {
             const body = new FormData();
@@ -66,42 +77,41 @@ async function uploadFilesToBatch(node, files) {
             body.append("subfolder", subfolderName);
             body.append("overwrite", "true");
             body.append("type", "input");
-
+            
             const response = await api.fetchApi("/upload/image", {
                 method: "POST",
                 body,
             });
-
             if (response.status !== 200) {
                 throw new Error(`Status ${response.status}`);
             }
             return response.json();
         });
-
+        
         await Promise.all(promises);
-
-        const folderWidget = node.widgets.find(w => w.name === "batch");
-        if (folderWidget) {
-            if (folderWidget.options.values.length === 1 && folderWidget.options.values[0] === "None") {
-                folderWidget.options.values = [];
+        
+        if (batchWidget) {
+            if (!isAppend || currentBatch === "None") {
+                if (batchWidget.options.values.length === 1 && batchWidget.options.values[0] === "None") {
+                    batchWidget.options.values = [];
+                }
+                if (!batchWidget.options.values.includes(uuid)) {
+                    batchWidget.options.values.unshift(uuid);
+                }
+                batchWidget.value = uuid;
             }
-            
-            folderWidget.options.values.unshift(uuid);
-            folderWidget.value = uuid;
-            
-            if (folderWidget.callback) {
-                folderWidget.callback(uuid);
+            if (batchWidget.callback) {
+                batchWidget.callback(uuid);
             }
         }
         
         if (btn) btn.name = "Generating Preview...";
-        app.graph.setDirtyCanvas(true, true);
-        await fetchAndShowPreview(node, uuid);
-        
+        await fetchAndShowPreview(node, uuid, true); 
         console.log(`[BatchUpload] Success: ${uuid}`);
-
+        
     } catch (error) {
         console.error("[BatchUpload] Error:", error);
+        alert("Upload failed: " + error.message);
     } finally {
         if (btn) btn.name = originalLabel;
         app.graph.setDirtyCanvas(true, true);
@@ -118,7 +128,7 @@ app.registerExtension({
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
                 const node = this;
 
-                this.addWidget("button", "Choose files to upload", "Upload", () => {
+                this.addWidget("button", "Choose files to upload", "", () => {
                     const input = document.createElement("input");
                     input.type = "file";
                     input.multiple = true;
@@ -132,8 +142,10 @@ app.registerExtension({
 
                     document.body.appendChild(input);
                     input.click();
+                }, {
+                    serialize: false
                 });
-
+                
                 node.onDragOver = function (e) {
                     if (e.dataTransfer && e.dataTransfer.items) {
                         const hasImage = Array.from(e.dataTransfer.items).some(item => item.kind === 'file');
