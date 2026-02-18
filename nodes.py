@@ -1,8 +1,8 @@
 import os
-import random
 import cv2
-import random
 import json
+import math
+import random
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -519,7 +519,7 @@ class CudaDevicePatcher:
     RETURN_NAMES = ("any", "original")
     OUTPUT_NODE = True
     FUNCTION = "main"
-    CATEGORY = "lhyNode/utils"
+    CATEGORY = "lhyNode/Utils"
     
     def main(self, any, device):
         ori = os.environ.get("CUDA_VISIBLE_DEVICES", "")
@@ -535,7 +535,7 @@ class noneNode:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("None",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/utils"
+    CATEGORY = "lhyNode/Utils"
     
     def main(self):
         return (None,)
@@ -553,7 +553,7 @@ class queueHandler:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("any",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/utils"
+    CATEGORY = "lhyNode/Utils"
     
     def main(self, trigger, any):
         return (any,)
@@ -574,7 +574,7 @@ class GrowMask_lhy:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("mask",)
     FUNCTION = "process"
-    CATEGORY = 'lhyNode/masking'
+    CATEGORY = 'lhyNode/Mask'
     
     def process(self, mask, expand_by, tapered_corners, batch_size, device):
         if expand_by == 0:
@@ -630,7 +630,7 @@ class DrawMaskOnImage_lhy:
     RETURN_TYPES = ("IMAGE", )
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/masking"
+    CATEGORY = "lhyNode/Mask"
     
     def process(self, image, mask, color, device="cpu"):
         target_device = torch.device("cuda") if device == "gpu" else torch.device("cpu")
@@ -692,7 +692,7 @@ class BlockifyMask_lhy:
     RETURN_TYPES = ("MASK", )
     RETURN_NAMES = ("mask",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/masking"
+    CATEGORY = "lhyNode/Mask"
     
     def process(self, masks, block_size, device="cpu"):
         B, H, W = masks.shape
@@ -746,7 +746,7 @@ class WanAnimateMaskPreprocessor:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "process"
-    CATEGORY = 'lhyNode/masking'
+    CATEGORY = 'lhyNode/Wan'
     
     def process(self, image, mask, expand_by, tapered_corners, block_size, color, batch_size, device):
         B, H, W, C = image.shape
@@ -846,7 +846,7 @@ class ImageOverlay_lhy:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/image"
+    CATEGORY = "lhyNode/Image"
     
     def process(self, source_image, overlay_image, blend_mode, opacity, scale_to_fill, invert_mask, optional_mask=None):
         # 获取基础维度
@@ -981,6 +981,59 @@ class ImageOverlay_lhy:
         if mode == "soft_light":
             return (1.0 - 2.0 * s) * b**2 + 2.0 * s * b
         return s
+    
+class WanAnimateBestFrameWindow:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "frame_count": ("INT", {"default": 81, "min": 1, "max": 100000, "step": 1}),
+                "force_size": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 1025,
+                    "step": 4,
+                    "tooltip": "Set to 1 to automatically calculate the frame window; otherwise, use this value."
+                }),
+            }
+        }
+    
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("frame_window_size",)
+    FUNCTION = "process"
+    CATEGORY = "lhyNode/Wan"
+    
+    def process(self, frame_count, force_size):
+        min_w = 57
+        max_w = 97
+        
+        if force_size > 1: return force_size
+        if frames_count <= min_w: return min_w
+        
+        best = None
+        n_min = math.ceil((min_w - 1) / 4)
+        n_max = math.floor((max_w - 1) / 4)
+    
+        for n in range(n_min, n_max + 1):
+            W = 4 * n + 1
+    
+            if W < min_w or W > max_w:
+                continue
+    
+            k = math.ceil(frames / W)
+            padding = k * W - frames
+            candidate = (padding, k, -W)
+    
+            if best is None or candidate < best[0]:
+                best = (candidate, {
+                    "window": W,
+                    "segments": k,
+                    "padding": padding,
+                })
+    
+            if padding == 0:
+                break
+        return (best,)
 
 NODE_CLASS_MAPPINGS = {
     "detailerKSamplerSchedulerFallback": detailerKSamplerSchedulerFallback,
@@ -1002,6 +1055,7 @@ NODE_CLASS_MAPPINGS = {
     "DrawMaskOnImage_lhy": DrawMaskOnImage_lhy,
     "BlockifyMask_lhy": BlockifyMask_lhy,
     "WanAnimateMaskPreprocessor": WanAnimateMaskPreprocessor,
+    "WanAnimateBestFrameWindow": WanAnimateBestFrameWindow,
     "ImageOverlay_lhy": ImageOverlay_lhy,
 }
 
@@ -1025,5 +1079,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DrawMaskOnImage_lhy": "Draw Mask On Image",
     "BlockifyMask_lhy": "Blockify Mask",
     "WanAnimateMaskPreprocessor": "WanAnimate Mask Preprocessor",
+    "WanAnimateBestFrameWindow": "WanAnimate Best Frame Window",
     "ImageOverlay_lhy": "Image Overlay",
 }
