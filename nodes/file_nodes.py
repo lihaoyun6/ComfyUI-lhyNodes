@@ -26,12 +26,12 @@ class ImageBatchtoImageList:
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Image"
     
-    def convert(self, image_batch, ):
+    def convert(self, image_batch, fill_color):
         image_list = []
         mask_list = []
         
         for img in image_batch:
-            hex_color = .lstrip("#")
+            hex_color = fill_color.lstrip("#")
             r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
             
             rgba_img = img.convert("RGBA")
@@ -57,7 +57,7 @@ class ImageBatchtoImages:
                 "height": ("INT", {"default": 512}),
                 "interpolation": (["nearest", "bilinear", "bicubic", "lanczos"],),
                 "mothed": (["crop (center)", "resize (stretch)", "pad (fill)", "pad (edge)"],),
-                "": ("COLORCODE", {"default": "#000000"}),
+                "fill_color": ("COLORCODE", {"default": "#000000"}),
             },
         }
 
@@ -66,7 +66,7 @@ class ImageBatchtoImages:
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Image"
     
-    def convert(self, image_batch, width, height, interpolation, mothed, ):
+    def convert(self, image_batch, width, height, interpolation, mothed, fill_color):
         num_images = len(image_batch)
         output_images = torch.zeros((num_images, height, width, 3), dtype=torch.float32)
         output_masks = torch.zeros((num_images, height, width), dtype=torch.float32)
@@ -79,7 +79,7 @@ class ImageBatchtoImages:
         }
         _interpolation = interpolation_map.get(interpolation, Image.LANCZOS)
         
-        hex_color = .lstrip("#")
+        hex_color = fill_color.lstrip("#")
         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
         
         for i, _img in enumerate(image_batch):
