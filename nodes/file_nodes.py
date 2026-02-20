@@ -205,16 +205,12 @@ class SaveImageAsZip:
         save_metadata = save_metadata[0]
         extra_pnginfo = extra_pnginfo[0]
         prompt = prompt[0]
-        
-        if len(image) == 1:
-            image = image[0]
             
         if text is not None:
             if len(image) != len(text):
                 raise ValueError(f"Images and Text must have the same length!")
-            
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, image[0].shape[1], image[0].shape[0])
-        
+
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, self.output_dir, 16, 16)
         zip_filename = f"{filename}_{counter:05}_.zip"
         zip_path = os.path.join(full_output_folder, zip_filename)
         
@@ -226,7 +222,7 @@ class SaveImageAsZip:
                 i_np = 255. * _image[0].cpu().numpy()
                 img = Image.fromarray(np.clip(i_np, 0, 255).astype(np.uint8))
                 img_byte_arr = io.BytesIO()
-                
+            
                 metadata = None
                 if save_metadata:
                     metadata = PngInfo()
@@ -235,7 +231,7 @@ class SaveImageAsZip:
                     if extra_pnginfo is not None:
                         for x in extra_pnginfo:
                             metadata.add_text(x, json.dumps(extra_pnginfo[x]))
-                
+            
                 img.save(img_byte_arr, pnginfo=metadata, format='PNG', compress_level=self.compress_level)
                 zf.writestr(f"{i:05}.png", img_byte_arr.getvalue())
                 if text is not None:
