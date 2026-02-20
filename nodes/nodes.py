@@ -2,15 +2,19 @@ import os
 import cv2
 import json
 import math
+import time
 import random
 import torch
 import torch.nn.functional as F
 import numpy as np
 
-from nodes import MAX_RESOLUTION
+from server import PromptServer
+from aiohttp import web
+from nodes import MAX_RESOLUTION, VAELoader
 from ultralytics import YOLO
 from ..utils.cqdm import cqdm
-import comfy.samplers
+import folder_paths
+import comfy.model_management as mm
     
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
@@ -434,23 +438,44 @@ class noneNode:
     def main(self):
         return (None,)
     
-class queueHandler:
+class QueueHandler:
+    # from: https://github.com/wywywywy/ComfyUI-pause/blob/main/PauseWorkflowNode.py
+    _instance = None  # Singleton pattern
+    status_by_id = {}
+        
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "trigger": (any_type,),
                 "any": (any_type,),
+                "pause": ("BOOLEAN", {"default": False}),
+            },
+            "hidden": {
+                "id": "UNIQUE_ID",
             }
         }
     
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("any",)
+    RETURN_TYPES = (any_type, any_type)
+    RETURN_NAMES = ("trigger", "any")
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
     
-    def main(self, trigger, any):
-        return (any,)
+    def main(self, trigger, any, pause, id):
+        if pause:
+            self.status_by_id[id] = "paused"
+            
+        while self.status_by_id[id] == "paused":
+            mm.throw_exception_if_processing_interrupted()
+            time.sleep(0.1)
+            
+        return {"result": (trigger, any)}
+
+@PromptServer.instance.routes.post("/lhy_queuehandler/continue/{node_id}")
+async def handle_continue(request):
+    node_id = request.match_info["node_id"].strip()
+    QueueHandler.status_by_id[node_id] = "continue"
+    return web.json_response({"status": "ok"})
 
 class GrowMask_lhy:
     @classmethod
@@ -906,6 +931,139 @@ class WanAnimateBestFrameWindow:
             
         return (best_window,)
 
+class CheckpointName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {
+                    "tooltip": "The name of the checkpoint (model)."
+                }),
+            }
+        }
+        
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("ckpt_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output checkpoint name."
+    SEARCH_ALIASES = ["load model", "checkpoint", "model loader", "load checkpoint", "ckpt", "model"]
+    
+    def main(self, ckpt_name):
+        return (ckpt_name,)
+    
+class UNETName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "unet_name": (folder_paths.get_filename_list("diffusion_models"), {
+                    "tooltip": "The name of the U-Net."
+                }),
+            }
+        }
+        
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("unet_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output U-Net name."
+    
+    def main(self, unet_name):
+        return (unet_name,)
+
+class LoraName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "lora_name": (folder_paths.get_filename_list("loras"), {
+                    "tooltip": "The name of the LoRA."
+                }),
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("lora_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output LoRA name."
+    SEARCH_ALIASES = ["lora", "load lora", "apply lora", "lora loader", "lora model"]
+    
+    def main(self, lora_name):
+        return (lora_name,)
+
+class VAEName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "vae_name": (VAELoader.vae_list(VAELoader), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("vae_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output VAE name."
+    
+    def main(self, vae_name):
+        return (vae_name,)
+    
+class CLIPName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "clip_name": (folder_paths.get_filename_list("text_encoders"), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("clip_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output CLIP name."
+    
+    def main(self, clip_name):
+        return (clip_name,)
+    
+class CLIPVisionName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "clip_name": (folder_paths.get_filename_list("clip_vision"), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("clip_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output CLIP Vision name."
+    
+    def main(self, clip_name):
+        return (clip_name,)
+
+class ControlNetName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "control_net_name": (folder_paths.get_filename_list("controlnet"), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("control_net_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output ControlNet name."
+    SEARCH_ALIASES = ["controlnet", "control net", "cn", "load controlnet", "controlnet loader"]
+    
+    def main(self, control_net_name):
+        return (control_net_name,)
+    
+class UpscaleModelName:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "model_name": (folder_paths.get_filename_list("upscale_models"), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("model_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output upscale model name."
+    
+    def main(self, model_name):
+        return (model_name,)
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -917,13 +1075,21 @@ NODE_CLASS_MAPPINGS = {
     "PoseReformer": PoseReformer,
     "CudaDevicePatcher": CudaDevicePatcher,
     "noneNode": noneNode,
-    "queueHandler": queueHandler,
+    "QueueHandler": QueueHandler,
     "GrowMask_lhy": GrowMask_lhy,
     "DrawMaskOnImage_lhy": DrawMaskOnImage_lhy,
     "BlockifyMask_lhy": BlockifyMask_lhy,
     "WanAnimateMaskPreprocessor": WanAnimateMaskPreprocessor,
     "WanAnimateBestFrameWindow": WanAnimateBestFrameWindow,
     "ImageOverlay_lhy": ImageOverlay_lhy,
+    "CheckpointName": CheckpointName,
+    "UNETName": UNETName,
+    "LoraName": LoraName,
+    "VAEName": VAEName,
+    "CLIPName": CLIPName,
+    "CLIPVisionName": CLIPVisionName,
+    "ControlNetName": ControlNetName,
+    "UpscaleModelName": UpscaleModelName,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -937,11 +1103,19 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PoseReformer": "WanAnimate Pose Reformer",
     "CudaDevicePatcher": "Set Cuda Device",
     "noneNode": "None",
-    "queueHandler": "Queue Handler",
+    "QueueHandler": "Queue Handler",
     "GrowMask_lhy": "Grow Mask",
     "DrawMaskOnImage_lhy": "Draw Mask On Image",
     "BlockifyMask_lhy": "Blockify Mask",
     "WanAnimateMaskPreprocessor": "WanAnimate Mask Preprocessor",
     "WanAnimateBestFrameWindow": "WanAnimate Best Frame Window",
     "ImageOverlay_lhy": "Image Overlay",
+    "CheckpointName": "Checkpoint Name",
+    "UNETName": "UNet Name",
+    "LoraName": "LoRA Name",
+    "VAEName": "VAE Name",
+    "CLIPName": "CLIP Name",
+    "CLIPVisionName": "CLIP Vision Name",
+    "ControlNetName": "ControlNet Name",
+    "UpscaleModelName": "Upscale Model Name",
 }
