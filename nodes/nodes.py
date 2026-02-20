@@ -39,6 +39,7 @@ class MaskToSAMCoords:
     RETURN_NAMES = ("coordinates",)
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Mask"
+    DESCRIPTION = 'Generate SAM conditions using mask brush.'
     
     def convert(self, mask: torch.Tensor, threshold, max_regions, points_per_region):
         mask_np = mask[0].cpu().numpy()
@@ -98,6 +99,7 @@ class MaskToSAMCoordsV2:
     RETURN_NAMES = ("coordinates_positive", "coordinates_negative",)
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Mask"
+    DESCRIPTION = 'Generate positive and negative SAM conditions using mask brush and colored brush.'
     
     def convert(self, mask: torch.Tensor, threshold, max_regions, points_per_region, negative_color, image: torch.Tensor = None):
         color_map = {
@@ -164,7 +166,11 @@ class StrFormat:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "format": ("STRING", {"default": "", "multiline": True}),
+                "format": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "Use {} as placeholders to insert variables."
+                }),
                 "value1": ("STRING", {"default": ""}),
                 "value2": ("STRING", {"default": ""}),
                 "value3": ("STRING", {"default": ""}),
@@ -178,6 +184,7 @@ class StrFormat:
     RETURN_NAMES = ("string",)
     FUNCTION = "main"
     CATEGORY = 'lhyNodes/String'
+    DESCRIPTION = 'Format and output the text containing placeholders "{}" according to the variables.'
     
     def main(self, format, value1, value2, value3, value4, value5, value6):
         return (format.format(value1, value2, value3, value4, value5, value6),)
@@ -187,7 +194,11 @@ class StrFormatAdv:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "format": ("STRING", {"default": "", "multiline": True}),
+                "format": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "Use {} as placeholders to insert variables."
+                }),
                 "value1": ("STRING", {"default": ""}),
                 "switch1": ("BOOLEAN", {"default": True}),
                 "value2": ("STRING", {"default": ""}),
@@ -207,6 +218,7 @@ class StrFormatAdv:
     RETURN_NAMES = ("string",)
     FUNCTION = "main"
     CATEGORY = 'lhyNodes/String'
+    DESCRIPTION = 'Format and output the text containing placeholders "{}" according to the variables.'
     
     def main(self, format, value1, switch1, value2, switch2, value3, switch3, value4, switch4, value5, switch5, value6, switch6):
         v1 = value1 if switch1 else ""
@@ -245,10 +257,7 @@ class CSVRandomPicker:
     RETURN_TYPES = ("STRING",)
     FUNCTION = "pick_random_items"
     CATEGORY = "lhyNodes/String"
-    
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return True
+    DESCRIPTION = 'Randomly select elements from a CSV string by seed.'
     
     def pick_random_items(self, csv_string, count, separator, seed):
         items = [item.strip() for item in csv_string.split(separator) if item.strip()]
@@ -300,10 +309,7 @@ class CSVRandomPickerAdv:
     RETURN_TYPES = ("STRING",)
     FUNCTION = "pick_random_items"
     CATEGORY = "lhyNodes/String"
-    
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return True
+    DESCRIPTION = 'Randomly select elements from a CSV string by seed.'
     
     def pick_random_items(self, csv_string, min_count, max_count, input_separator, output_separator, seed):
         items = [item.strip() for item in csv_string.split(input_separator) if item.strip()]
@@ -340,7 +346,7 @@ class YoloFaceReformer:
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
     CATEGORY = "lhyNode/WanAnimate"
-    DESCRIPTION = "Automatically reuse the previous detected face when none is found. Optimized for large inputs via batching."
+    DESCRIPTION = "Remove faceless frames from the facial frame sequence and restore its coherence."
     
     def process(self, images, threshold, batch_size, enabled):
         if not enabled:
@@ -418,6 +424,7 @@ class CudaDevicePatcher:
     OUTPUT_NODE = True
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = 'Modify the value of the environment variable "CUDA_VISIBLE_DEVICES" during runtime.'
     
     def main(self, any, device):
         ori = os.environ.get("CUDA_VISIBLE_DEVICES", "")
@@ -434,12 +441,13 @@ class noneNode:
     RETURN_NAMES = ("None",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = 'Do nothing, just output Python object "None".'
     
     def main(self):
         return (None,)
     
 class QueueHandler:
-    # from: https://github.com/wywywywy/ComfyUI-pause/blob/main/PauseWorkflowNode.py
+    # "pause" code comes from: https://github.com/wywywywy/ComfyUI-pause/blob/main/PauseWorkflowNode.py
     _instance = None  # Singleton pattern
     status_by_id = {}
         
@@ -460,6 +468,7 @@ class QueueHandler:
     RETURN_NAMES = ("trigger", "any")
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Control the execution order of downstream nodes through trigger value."
     
     def main(self, trigger, any, pause, id):
         if pause:
@@ -494,6 +503,7 @@ class GrowMask_lhy:
     RETURN_NAMES = ("mask",)
     FUNCTION = "process"
     CATEGORY = 'lhyNode/Mask'
+    DESCRIPTION = "Grew masks at an extremely fast speed."
     
     def process(self, mask, expand_by, tapered_corners, batch_size, device):
         if expand_by == 0:
@@ -666,6 +676,7 @@ class WanAnimateMaskPreprocessor:
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "process"
     CATEGORY = 'lhyNode/Wan'
+    DESCRIPTION = 'All-in-one Wan Animate mask preprocessor.'
     
     def process(self, image, mask, expand_by, tapered_corners, block_size, color, batch_size, device):
         B, H, W, C = image.shape
@@ -897,6 +908,7 @@ class WanAnimateBestFrameWindow:
     RETURN_NAMES = ("frame_window_size",)
     FUNCTION = "process"
     CATEGORY = "lhyNode/Wan"
+    DESCRIPTION = 'Calculate the optimal frame window size based on the total frames count.'
     
     def process(self, frame_count, force_size):
         min_w = 57
@@ -946,7 +958,7 @@ class CheckpointName:
     RETURN_NAMES = ("ckpt_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output checkpoint name."
+    DESCRIPTION = "Output the name of the selected Checkpoint."
     SEARCH_ALIASES = ["load model", "checkpoint", "model loader", "load checkpoint", "ckpt", "model"]
     
     def main(self, ckpt_name):
@@ -967,7 +979,7 @@ class UNETName:
     RETURN_NAMES = ("unet_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output U-Net name."
+    DESCRIPTION = "Output the name of the selected UNet."
     
     def main(self, unet_name):
         return (unet_name,)
@@ -987,7 +999,7 @@ class LoraName:
     RETURN_NAMES = ("lora_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output LoRA name."
+    DESCRIPTION = "Output the name of the selected LoRA."
     SEARCH_ALIASES = ["lora", "load lora", "apply lora", "lora loader", "lora model"]
     
     def main(self, lora_name):
@@ -1002,7 +1014,7 @@ class VAEName:
     RETURN_NAMES = ("vae_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output VAE name."
+    DESCRIPTION = "Output the name of the selected VAE."
     
     def main(self, vae_name):
         return (vae_name,)
@@ -1016,7 +1028,7 @@ class CLIPName:
     RETURN_NAMES = ("clip_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output CLIP name."
+    DESCRIPTION = "Output the name of the selected CLIP."
     
     def main(self, clip_name):
         return (clip_name,)
@@ -1030,7 +1042,7 @@ class CLIPVisionName:
     RETURN_NAMES = ("clip_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output CLIP Vision name."
+    DESCRIPTION = "Output the name of the selected CLIP Vision model."
     
     def main(self, clip_name):
         return (clip_name,)
@@ -1044,7 +1056,7 @@ class ControlNetName:
     RETURN_NAMES = ("control_net_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output ControlNet name."
+    DESCRIPTION = "Output the name of the selected ControlNet model."
     SEARCH_ALIASES = ["controlnet", "control net", "cn", "load controlnet", "controlnet loader"]
     
     def main(self, control_net_name):
@@ -1059,7 +1071,7 @@ class UpscaleModelName:
     RETURN_NAMES = ("model_name",)
     FUNCTION = "main"
     CATEGORY = "lhyNode/Utils"
-    DESCRIPTION = "Output upscale model name."
+    DESCRIPTION = "Output the name of the selected upscale model."
     
     def main(self, model_name):
         return (model_name,)
@@ -1101,7 +1113,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CSVRandomPickerAdv": "CSV RandomPicker (Advanced)",
     "YoloFaceReformer": "WanAnimate Face Reformer",
     "PoseReformer": "WanAnimate Pose Reformer",
-    "CudaDevicePatcher": "Set Cuda Device",
+    "CudaDevicePatcher": "Set CUDA Device",
     "noneNode": "None",
     "QueueHandler": "Queue Handler",
     "GrowMask_lhy": "Grow Mask",
