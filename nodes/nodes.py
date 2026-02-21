@@ -460,7 +460,7 @@ class QueueHandler:
                 "pause": ("BOOLEAN", {"default": False}),
             },
             "hidden": {
-                "id": "UNIQUE_ID",
+                "unique_id": "UNIQUE_ID",
             }
         }
     
@@ -470,13 +470,13 @@ class QueueHandler:
     CATEGORY = "lhyNode/Utils"
     DESCRIPTION = "Control the execution order of downstream nodes through trigger value."
     
-    def main(self, trigger, any, pause, id):
+    def main(self, trigger, any, pause, unique_id):
         if pause:
-            self.status_by_id[id] = "paused"
+            self.status_by_id[unique_id] = "paused"
             
-        while self.status_by_id[id] == "paused":
+        while self.status_by_id.get(unique_id,"") == "paused":
             mm.throw_exception_if_processing_interrupted()
-            time.sleep(0.1)
+            time.sleep(0.2)
             
         return {"result": (trigger, any)}
 
