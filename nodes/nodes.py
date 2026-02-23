@@ -13,6 +13,7 @@ from aiohttp import web
 from nodes import MAX_RESOLUTION, VAELoader
 from ultralytics import YOLO
 from ..utils.cqdm import cqdm
+from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
 import folder_paths
 import comfy.model_management as mm
     
@@ -445,6 +446,20 @@ class noneNode:
     
     def main(self):
         return (None,)
+
+class AnyToAny:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {"any": (any_type,),}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("any",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "A pass-through node."
+    
+    def main(self, any):
+        return (any,)
     
 class QueueHandler:
     # "pause" code comes from: https://github.com/wywywywy/ComfyUI-pause/blob/main/PauseWorkflowNode.py
@@ -917,7 +932,8 @@ class WanAnimateBestFrameWindow:
         if force_size > 1:
             return force_size
         if frame_count <= min_w:
-            return min_w
+            best_window = frame_count + ((1 - frame_count) % 4)
+            return (best_window,)
         
         best_window = min_w
         best_candidate = None
@@ -942,6 +958,57 @@ class WanAnimateBestFrameWindow:
                 break
             
         return (best_window,)
+
+class DrawViTPose_lhy:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pose_data": ("POSEDATA",),
+                "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 1, "tooltip": "Width of the generation"}),
+                "height": ("INT", {"default": 480, "min": 64, "max": 2048, "step": 1, "tooltip": "Height of the generation"}),
+                "retarget_padding": ("INT", {"default": 16, "min": 0, "max": 512, "step": 1, "tooltip": "When > 0, the retargeted pose image is padded and resized to the target size"}),
+                "body_stick_width": ("INT", {"default": -1, "min": -1, "max": 20, "step": 1, "tooltip": "Width of the body sticks. Set to 0 to disable body drawing, -1 for auto"}),
+                "hand_stick_width": ("INT", {"default": -1, "min": -1, "max": 20, "step": 1, "tooltip": "Width of the hand sticks. Set to 0 to disable hand drawing, -1 for auto"}),
+                "draw_head": ("BOOLEAN", {"default": "True", "tooltip": "Whether to draw head keypoints"}),
+            },
+        }
+    
+    RETURN_TYPES = ("IMAGE", )
+    RETURN_NAMES = ("pose_images", )
+    FUNCTION = "process"
+    CATEGORY = "lhyNode/Wan"
+    DESCRIPTION = "Draw pose images from pose data using less memory."
+    
+    def process(self, pose_data, width, height, body_stick_width, hand_stick_width, draw_head, retarget_padding=64):
+        retarget_image = pose_data.get("retarget_image", None)
+        pose_metas = pose_data["pose_metas"]
+        
+        draw_hand = hand_stick_width != 0
+        use_retarget_resize = retarget_padding > 0 and retarget_image is not None
+        
+        num_frames = len(pose_metas)
+        crop_target_image = None
+        pose_images_tensor = torch.empty((num_frames, height, width, 3), dtype=torch.float32)
+        
+        for idx, meta in enumerate(cqdm(pose_metas, desc="Drawing pose images")):
+            canvas = np.zeros((height, width, 3), dtype=np.uint8)
+            pose_image = draw_aapose_by_meta_new(canvas, meta, draw_hand=draw_hand, draw_head=draw_head, body_stick_width=body_stick_width, hand_stick_width=hand_stick_width)
+            
+            if crop_target_image is None:
+                crop_target_image = pose_image
+                
+            if use_retarget_resize:
+                pose_image = resize_to_bounds(pose_image, height, width, crop_target_image=crop_target_image, extra_padding=retarget_padding)
+            else:
+                pose_image = padding_resize(pose_image, height, width)
+                
+            if pose_image.dtype != np.uint8:
+                pose_image = np.clip(pose_image, 0, 255).astype(np.uint8)
+                
+            pose_images_tensor[idx] = torch.from_numpy(pose_image).float() / 255.0
+
+        return (pose_images_tensor, )
 
 class CheckpointName:
     @classmethod
@@ -1087,6 +1154,7 @@ NODE_CLASS_MAPPINGS = {
     "PoseReformer": PoseReformer,
     "CudaDevicePatcher": CudaDevicePatcher,
     "noneNode": noneNode,
+    "AnyToAny": AnyToAny,
     "QueueHandler": QueueHandler,
     "GrowMask_lhy": GrowMask_lhy,
     "DrawMaskOnImage_lhy": DrawMaskOnImage_lhy,
@@ -1102,6 +1170,7 @@ NODE_CLASS_MAPPINGS = {
     "CLIPVisionName": CLIPVisionName,
     "ControlNetName": ControlNetName,
     "UpscaleModelName": UpscaleModelName,
+    "DrawViTPose_lhy": DrawViTPose_lhy,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1115,6 +1184,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PoseReformer": "WanAnimate Pose Reformer",
     "CudaDevicePatcher": "Set CUDA Device",
     "noneNode": "None",
+    "AnyToAny": "Any To Any",
     "QueueHandler": "Queue Handler",
     "GrowMask_lhy": "Grow Mask",
     "DrawMaskOnImage_lhy": "Draw Mask On Image",
@@ -1129,5 +1199,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPName": "CLIP Name",
     "CLIPVisionName": "CLIP Vision Name",
     "ControlNetName": "ControlNet Name",
-    "UpscaleModelName": "Upscale Model Name",
+    "DrawViTPose_lhy": "Draw ViT Pose",
 }
