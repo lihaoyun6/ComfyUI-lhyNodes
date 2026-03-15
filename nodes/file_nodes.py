@@ -16,7 +16,7 @@ class ImageBatchtoImageList:
         return {
             "required": {
                 "image_batch": ("image_batch", ),
-                "fill_color": ("COLORCODE", {"default": "#000000"}),
+                "fill_color": ("COLOR_CODE", {"default": "#000000"}),
             },
         }
     
@@ -57,7 +57,7 @@ class ImageBatchtoImages:
                 "height": ("INT", {"default": 512}),
                 "interpolation": (["nearest", "bilinear", "bicubic", "lanczos"],),
                 "mothed": (["crop (center)", "resize (stretch)", "pad (fill)", "pad (edge)"],),
-                "fill_color": ("COLORCODE", {"default": "#000000"}),
+                "fill_color": ("COLOR_CODE", {"default": "#000000"}),
             },
         }
 

@@ -1,4 +1,5 @@
 import os
+import re
 import cv2
 import json
 import math
@@ -1143,6 +1144,27 @@ class UpscaleModelName:
     def main(self, model_name):
         return (model_name,)
 
+class CodeableString:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "value": ("STRING", {
+                "default": "",
+                "multiline": True,
+                "placeholder": "You can use python-style comment syntax here."
+            })
+        }}
+    
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Advanced string node that support comments."
+    
+    def main(self, value):
+        text = re.sub(r"'''[\s\S]*?'''", "", value)
+        text = re.sub(r"^\s*#.*$", "", text, flags=re.MULTILINE)
+        return (text,)
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1171,6 +1193,7 @@ NODE_CLASS_MAPPINGS = {
     "ControlNetName": ControlNetName,
     "UpscaleModelName": UpscaleModelName,
     "DrawViTPose_lhy": DrawViTPose_lhy,
+    "CodeableString": CodeableString,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1200,4 +1223,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPVisionName": "CLIP Vision Name",
     "ControlNetName": "ControlNet Name",
     "DrawViTPose_lhy": "Draw ViT Pose",
+    "CodeableString": "Codeable String",
 }
