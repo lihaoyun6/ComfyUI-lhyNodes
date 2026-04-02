@@ -931,7 +931,7 @@ class WanAnimateBestFrameWindow:
         max_w = 97
         
         if force_size > 1:
-            return force_size
+            return (force_size,)
         if frame_count <= min_w:
             best_window = frame_count + ((1 - frame_count) % 4)
             return (best_window,)
@@ -1152,6 +1152,10 @@ class CodeableString:
                 "default": "",
                 "multiline": True,
                 "placeholder": "You can use python-style comment syntax here."
+            }),
+            "trim_empty_lines": ("BOOLEAN", {
+                "default": True,
+                "tooltip": "Remove all blank lines."
             })
         }}
     
@@ -1160,9 +1164,14 @@ class CodeableString:
     CATEGORY = "lhyNode/Utils"
     DESCRIPTION = "Advanced string node that support comments."
     
-    def main(self, value):
+    def main(self, value, trim_empty_lines):
         text = re.sub(r"'''[\s\S]*?'''", "", value)
         text = re.sub(r"^\s*#.*$", "", text, flags=re.MULTILINE)
+        text = re.sub(r"#.*", "", text)
+        text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
+        if trim_empty_lines:
+            text = re.sub(r"^\s*\n", "", text, flags=re.MULTILINE)
+        text = text.strip()
         return (text,)
 
 NODE_CLASS_MAPPINGS = {
