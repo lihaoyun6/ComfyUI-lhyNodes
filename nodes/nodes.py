@@ -17,12 +17,28 @@ from ..utils.cqdm import cqdm
 from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
 import folder_paths
 import comfy.model_management as mm
-    
+
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
-    
+
 any_type = AnyType("*")
+    
+def update_folder_names_and_paths(key, targets=[]):
+    # check for existing key
+    base = folder_paths.folder_names_and_paths.get(key, ([], {}))
+    base = base[0] if isinstance(base[0], (list, set, tuple)) else []
+    # find base key & add w/ fallback, sanity check + warning
+    target = next((x for x in targets if x in folder_paths.folder_names_and_paths), targets[0])
+    orig, _ = folder_paths.folder_names_and_paths.get(target, ([], {}))
+    folder_paths.folder_names_and_paths[key] = (orig or base, {".gguf"})
+    if base and base != orig:
+        logging.warning(f"Unknown file list already present on key {key}: {base}")
+        
+# Add a custom keys for files ending in .gguf
+update_folder_names_and_paths("unet_gguf", ["diffusion_models", "unet"])
+update_folder_names_and_paths("clip_gguf", ["text_encoders", "clip"])
+
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class MaskToSAMCoords:
@@ -1051,6 +1067,27 @@ class UNETName:
     
     def main(self, unet_name):
         return (unet_name,)
+    
+class UNETNameGGUF:
+    @classmethod
+    def INPUT_TYPES(s):
+        unet_names = [x for x in folder_paths.get_filename_list("unet_gguf")]
+        return {
+            "required": {
+                "unet_name": (unet_names, {
+                    "tooltip": "The name of the U-Net."
+                }),
+            }
+        }
+        
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("unet_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output the name of the selected UNet."
+    
+    def main(self, unet_name):
+        return (unet_name,)
 
 class LoraName:
     @classmethod
@@ -1091,6 +1128,20 @@ class CLIPName:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { "clip_name": (folder_paths.get_filename_list("text_encoders"), )}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("clip_name",)
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "Output the name of the selected CLIP."
+    
+    def main(self, clip_name):
+        return (clip_name,)
+
+class CLIPNameGGUF:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "clip_name": (folder_paths.get_filename_list("clip_gguf"), )}}
     
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("clip_name",)
@@ -1195,9 +1246,11 @@ NODE_CLASS_MAPPINGS = {
     "ImageOverlay_lhy": ImageOverlay_lhy,
     "CheckpointName": CheckpointName,
     "UNETName": UNETName,
+    "UNETNameGGUF": UNETNameGGUF,
     "LoraName": LoraName,
     "VAEName": VAEName,
     "CLIPName": CLIPName,
+    "CLIPNameGGUF": CLIPNameGGUF,
     "CLIPVisionName": CLIPVisionName,
     "ControlNetName": ControlNetName,
     "UpscaleModelName": UpscaleModelName,
@@ -1226,9 +1279,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageOverlay_lhy": "Image Overlay",
     "CheckpointName": "Checkpoint Name",
     "UNETName": "UNet Name",
+    "UNETNameGGUF": "UNet Name (GGUF)",
     "LoraName": "LoRA Name",
     "VAEName": "VAE Name",
     "CLIPName": "CLIP Name",
+    "CLIPNameGGUF": "CLIP Name (GGUF)",
     "CLIPVisionName": "CLIP Vision Name",
     "ControlNetName": "ControlNet Name",
     "DrawViTPose_lhy": "Draw ViT Pose",
