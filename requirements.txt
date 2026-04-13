@@ -1,3 +1,4 @@
 ultralytics>=8.3.162
 opencv-python
 numpy
+yarl

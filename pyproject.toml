@@ -20,7 +20,7 @@ license = {file = "LICENSE"}
 #     "Environment :: GPU :: Apple Metal",    # Apple Metal support
 ]
 
-dependencies = ["ultralytics>=8.3.162", "opencv-python", "numpy"]
+dependencies = ["ultralytics>=8.3.162", "opencv-python", "numpy", "yarl"]
 
 [project.urls]
 Repository = "https://github.com/lihaoyun6/ComfyUI-lhyNodes"
