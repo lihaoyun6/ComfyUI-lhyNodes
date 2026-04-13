@@ -5,12 +5,14 @@ import json
 import math
 import time
 import random
+import requests
 import torch
 import torch.nn.functional as F
 import numpy as np
 
 from server import PromptServer
 from aiohttp import web
+from yarl import URL
 from nodes import MAX_RESOLUTION, VAELoader
 from ultralytics import YOLO
 from ..utils.cqdm import cqdm
@@ -1225,6 +1227,25 @@ class CodeableString:
         text = text.strip()
         return (text,)
 
+class RequestURL:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "any": (any_type,),
+            "url": ("STRING",),
+        }}
+    
+    RETURN_TYPES = (any_type, "STRING")
+    RETURN_NAMES = ("any", "resp")
+    FUNCTION = "main"
+    CATEGORY = "lhyNode/Utils"
+    DESCRIPTION = "."
+    
+    def main(self, any, url):
+        _url = URL(url)
+        resp = requests.get(_url)
+        return (any, resp.text)
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1256,6 +1277,7 @@ NODE_CLASS_MAPPINGS = {
     "UpscaleModelName": UpscaleModelName,
     "DrawViTPose_lhy": DrawViTPose_lhy,
     "CodeableString": CodeableString,
+    "RequestURL": RequestURL,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1287,5 +1309,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CLIPVisionName": "CLIP Vision Name",
     "ControlNetName": "ControlNet Name",
     "DrawViTPose_lhy": "Draw ViT Pose",
-    "CodeableString": "Codeable String",
+    "RequestURL": "Request URL",
 }
