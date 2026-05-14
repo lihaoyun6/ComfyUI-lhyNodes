@@ -1265,8 +1265,8 @@ class DynamicParameterPanel:
             }
         }
     
-    RETURN_TYPES = tuple(["*"] * 24)
-    RETURN_NAMES = tuple(["*"] * 24)
+    RETURN_TYPES = ("DYNAMIC_PARAMS",)
+    RETURN_NAMES = ("params_bundle",)
     FUNCTION = "execute"
     CATEGORY = "Custom/UI"
     DESCRIPTION = "Dynamically generate native controls from the input JSON."
@@ -1279,45 +1279,61 @@ class DynamicParameterPanel:
     def execute(self, config_json, unique_id=None, prompt=None, **kwargs):
         try:
             config = json.loads(config_json)
+            keys = list(config.keys())[:32]
             
-            #if len(config) > 24:
-            #    raise ValueError(f"Too many keys ({len(config)}). Max allowed is 24!")
-            
-            results = []
+            results = {}
             raw_inputs = {}
             if prompt is not None and unique_id is not None:
                 node_info = prompt.get(str(unique_id), {})
                 raw_inputs = node_info.get("inputs", {})
                 
-            for key, params in config.items():
-                if key in raw_inputs:
-                    val = raw_inputs[key]
-                elif key in kwargs:
-                    val = kwargs[key]
-                else:
-                    val = params.get("default", None)
-                    if params.get("type", "").upper() == "BOOLEAN" and val is None:
-                        val = True
-                        
+            for key in keys:
+                params = config[key]
+                val = raw_inputs.get(key, kwargs.get(key, params.get("default", None)))
                 expected_type = params.get("type", "STRING").upper()
                 precision = params.get("precision", None)
+                
                 if val is not None:
                     try:
-                        if expected_type == "INT":
-                            val = int(val)
+                        if expected_type == "INT": val = int(round(float(val)))
                         elif expected_type == "FLOAT":
                             val = float(val)
-                            if precision is not None:
-                                val = round(val, int(precision))
-                        elif expected_type == "BOOLEAN":
-                            val = bool(val)
-                        elif expected_type == "STRING":
-                            val = str(val)
-                    except:
-                        pass
-                        
-                results.append(val)
+                            if precision is not None: val = round(val, int(precision))
+                        elif expected_type == "BOOLEAN": val = bool(val)
+                    except: pass
+                results[key] = val
                 
+            bundle = {
+                "data": results,
+                "config": {k: config[k] for k in keys}
+            }
+            return (bundle,)
+        except Exception:
+            raise
+
+class ParameterUnpacker:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "params_bundle": ("DYNAMIC_PARAMS",),
+            }
+        }
+    
+    RETURN_TYPES = tuple(["*"] * 32)
+    RETURN_NAMES = tuple(["*"] * 32)
+    FUNCTION = "unpack"
+    CATEGORY = "Custom/UI"
+    
+    def unpack(self, params_bundle=None):
+        try:
+            data = params_bundle["data"]
+            config = params_bundle["config"]
+            
+            results = []
+            for key in config.keys():
+                results.append(data.get(key, None))
+            
             return tuple(results)
         except Exception:
             raise
@@ -1363,6 +1379,7 @@ NODE_CLASS_MAPPINGS = {
     "CodeableString": CodeableString,
     "RequestURL": RequestURL,
     "DynamicParameterPanel": DynamicParameterPanel,
+    "ParameterUnpacker": ParameterUnpacker,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1396,4 +1413,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DrawViTPose_lhy": "Draw ViT Pose",
     "RequestURL": "Request URL",
     "DynamicParameterPanel": "Dynamic Parameter Panel",
+    "ParameterUnpacker": "Parameter Unpacker",
 }

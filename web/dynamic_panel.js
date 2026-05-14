@@ -8,6 +8,8 @@ app.registerExtension({
             
             const onConfigure = nodeType.prototype.onConfigure;
             nodeType.prototype.onConfigure = function (info) {
+                this.isConfigured = true; 
+                
                 if (onConfigure) onConfigure.apply(this, arguments);
                 if (info && info.widgets_values) {
                     const savedJson = info.widgets_values[0];
@@ -15,7 +17,7 @@ app.registerExtension({
                     for (let i = 0; i < info.widgets_values.length; i++) {
                         if (this.widgets[i]) this.widgets[i].value = info.widgets_values[i];
                     }
-                    this.refreshLockState(); // 恢复后立即刷新锁定
+                    this.refreshLockState();
                 }
             };
 
@@ -23,7 +25,7 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
                 
-                this.outputs = [];
+                //this.outputs = [];
                 this.size = [300, 300];
 
                 this.addWidget("button", "🔄 Update This Panel", "btn_update", () => {
@@ -75,6 +77,19 @@ app.registerExtension({
                     this.computeSize();
                     this.setDirtyCanvas(true, true);
                 };
+                
+                this.notifyUnpackers = function() {
+                    if (!this.outputs || !this.outputs[0].links) return;
+                    this.outputs[0].links.forEach(linkId => {
+                        const link = app.graph.links[linkId];
+                        if (link) {
+                            const targetNode = app.graph.getNodeById(link.target_id);
+                            if (targetNode && targetNode.type === "ParameterUnpacker") {
+                                targetNode.syncFromUpstream();
+                            }
+                        }
+                    });
+                };
 
                 this.buildDynamicUI = async function(customJsonStr = null, isRestoring = false) {
                     let jsonStr = customJsonStr || this.widgets.find(w => w.name === "config_json")?.value;
@@ -86,11 +101,7 @@ app.registerExtension({
                         if (!isRestoring) alert("Invalid JSON!\n" + e.message); return;
                     }
                     
-                    const configKeys = Object.keys(config);
-                    if (configKeys.length > 24) {
-                        if (!isRestoring) alert(`Too many keys (${configKeys.length}). Max allowed is 24!`);
-                        return;
-                    }
+                    const entries = Object.entries(config).slice(0, 32);
 
                     const isStatic = (w) => {
                         return w.name === "config_json" || w.name === "is_locked" || w.value === "btn_update" || w.value === "btn_lock";
@@ -108,7 +119,7 @@ app.registerExtension({
                         }
                     }
 
-                    for (const [key, params] of Object.entries(config)) {
+                    for (const [key, params] of entries) {
                         const type = (params.type || "STRING").toUpperCase();
                         let widget;
                         let val = params.default;
@@ -165,28 +176,107 @@ app.registerExtension({
                         }
                         if (widget) { widget.label = params.name || key; widget.tooltip = params.tooltip; }
                     }
-
-                    // 端口同步逻辑
-                    if (!isRestoring) {
-                        const oldLinks = (this.outputs || []).map(o => ({ name: o.name, conns: (o.links || []).map(id => {
-                            const l = app.graph.links[id]; return l ? { t_id: l.target_id, t_s: l.target_slot } : null;
-                        }).filter(x => x) }));
-                        this.outputs = [];
-                        Object.keys(config).forEach((key, idx) => {
-                            const out = this.addOutput(key, (config[key].type || "STRING").toUpperCase());
-                            out.label = config[key].name || key;
-                            const bk = oldLinks.find(l => l.name === key);
-                            if (bk) bk.conns.forEach(c => this.connect(idx, c.t_id, c.t_s));
-                        });
-                    }
-
+                    
+                    if (!isRestoring) this.notifyUnpackers();
                     this.refreshLockState();
                 };
 
-                // 首次创建即刷新锁定状态（隐藏 is_locked）
-                setTimeout(() => this.refreshLockState(), 1);
-
+                setTimeout(() => {
+                    if (!this.isConfigured) {
+                        this.buildDynamicUI(null, true); 
+                    } else {
+                        this.refreshLockState();
+                    }
+                }, 10);
                 return r;
+            };
+        }
+        
+        if (nodeData.name === "ParameterUnpacker") {
+            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function () {
+                const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
+                this.outputs = [];
+                this.size = [200, 40];
+                
+                this.syncFromUpstream = function() {
+                    if (!this.inputs || !this.inputs[0].link) {
+                        if (this.outputs) {
+                            for (let i = 0; i < this.outputs.length; i++) this.disconnectOutput(i);
+                        }
+                        this.outputs = [];
+                        this.computeSize();
+                        this.setDirtyCanvas(true, true);
+                        return;
+                    }
+                    
+                    const linkId = this.inputs[0].link;
+                    const link = app.graph.links[linkId];
+                    if (!link) return;
+                    
+                    const upstreamNode = app.graph.getNodeById(link.origin_id);
+                    if (!upstreamNode || upstreamNode.type !== "DynamicParameterPanel") return;
+                    
+                    const jsonWidget = upstreamNode.widgets.find(w => w.name === "config_json");
+                    if (!jsonWidget) return;
+                    const value = jsonWidget.value || "{}"
+                    
+                    let config;
+                    try { config = JSON.parse(value); } catch (e) { return; }
+                    const entries = Object.entries(config).slice(0, 32);
+                    
+                    const oldLinks = [];
+                    if (this.outputs) {
+                        for (let i = 0; i < this.outputs.length; i++) {
+                            const output = this.outputs[i];
+                            if (output.links && output.links.length > 0) {
+                                const linksInfo = output.links.map(lId => {
+                                    const l = app.graph.links[lId];
+                                    return l ? { target_id: l.target_id, target_slot: l.target_slot } : null;
+                                }).filter(l => l);
+                                oldLinks.push({ name: output.name, connections: linksInfo });
+                                this.disconnectOutput(i);
+                            }
+                        }
+                    }
+                    
+                    this.outputs = [];
+                    entries.forEach(([key, params], idx) => {
+                        const type = (params.type || "STRING").toUpperCase();
+                        const displayName = params.name || key;
+                        
+                        this.addOutput(key, type);
+                        const newOutput = this.outputs[this.outputs.length - 1];
+                        newOutput.label = displayName;
+                        
+                        const backup = oldLinks.find(l => l.name === key);
+                        if (backup) {
+                            backup.connections.forEach(conn => {
+                                this.connect(idx, conn.target_id, conn.target_slot);
+                            });
+                        }
+                    });
+                    
+                    this.setSize(this.computeSize());
+                    this.setDirtyCanvas(true, true);
+                };
+                
+                return r;
+            };
+            
+            const onConnectionsChange = nodeType.prototype.onConnectionsChange;
+            nodeType.prototype.onConnectionsChange = function (type, slotIndex, isConnected, linkInfo) {
+                if (onConnectionsChange) onConnectionsChange.apply(this, arguments);
+                
+                if (type === 1 && slotIndex === 0) {
+                    setTimeout(() => this.syncFromUpstream(), 50);
+                }
+            };
+            
+            const onConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function () {
+                if (onConfigure) onConfigure.apply(this, arguments);
+                setTimeout(() => this.syncFromUpstream(), 100);
             };
         }
     }
