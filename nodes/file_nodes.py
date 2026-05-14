@@ -184,6 +184,7 @@ class SaveImageAsZip:
                 "image": ("IMAGE", ),
                 "filename_prefix": ("STRING", {"default": "ComfyUI"}),
                 "save_metadata": ("BOOLEAN", {"default": True}),
+                "format": (["png", "jpg", "png+jpg"], {"default": "png"})
             },
             "optional": {
                 "text": ("STRING", {"forceInput": True}),
@@ -200,7 +201,7 @@ class SaveImageAsZip:
     INPUT_IS_LIST = True
     CATEGORY = "lhyNodes/File"
     
-    def save_zip(self, image, filename_prefix, save_metadata, text=None, prompt=None, extra_pnginfo=None):
+    def save_zip(self, image, filename_prefix, save_metadata, format, text=None, prompt=None, extra_pnginfo=None):
         filename_prefix = filename_prefix[0]
         save_metadata = save_metadata[0]
         extra_pnginfo = extra_pnginfo[0]
@@ -222,6 +223,7 @@ class SaveImageAsZip:
                 i_np = 255. * _image[0].cpu().numpy()
                 img = Image.fromarray(np.clip(i_np, 0, 255).astype(np.uint8))
                 img_byte_arr = io.BytesIO()
+                jpg_byte_arr = io.BytesIO()
             
                 metadata = None
                 if save_metadata:
@@ -231,9 +233,22 @@ class SaveImageAsZip:
                     if extra_pnginfo is not None:
                         for x in extra_pnginfo:
                             metadata.add_text(x, json.dumps(extra_pnginfo[x]))
-            
-                img.save(img_byte_arr, pnginfo=metadata, format='PNG', compress_level=self.compress_level)
-                zf.writestr(f"{i:05}.png", img_byte_arr.getvalue())
+                            
+                if "png" in format:
+                    img.save(img_byte_arr, pnginfo=metadata, format='PNG', compress_level=self.compress_level)
+                    zf.writestr(f"{i:05}.png", img_byte_arr.getvalue())
+                
+                if "jpg" in format:
+                    img = img.convert("RGB")
+                    img.save(jpg_byte_arr, format='JPEG', quality=95)
+                    zf.writestr(f"{i:05}.jpg", jpg_byte_arr.getvalue())
+                    if format == "jpg":
+                        if prompt is not None:
+                            zf.writestr(f"{i:05}_prompt.json", str(json.dumps(prompt)))
+                        if extra_pnginfo is not None:
+                            for x in extra_pnginfo:
+                                zf.writestr(f"{i:05}_{x}.json", str(json.dumps(extra_pnginfo[x])))
+                            
                 if text is not None:
                     zf.writestr(f"{i:05}.txt", str(text[i]))
 

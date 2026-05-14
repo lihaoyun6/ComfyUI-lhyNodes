@@ -947,6 +947,7 @@ class WanAnimateBestFrameWindow:
     def process(self, frame_count, force_size):
         min_w = 57
         max_w = 97
+        overlap = 1
         
         if force_size > 1:
             return (force_size,)
@@ -965,17 +966,17 @@ class WanAnimateBestFrameWindow:
             if W < min_w or W > max_w:
                 continue
             
-            k = math.ceil(frame_count / W)
-            padding = k * W - frame_count
-            candidate = (padding, k, -W)
+            k = math.ceil((frame_count - overlap) / (W - overlap))
+            coverage = k * (W - overlap) + overlap
+            padding = coverage - frame_count
+            
+            compute_cost = k * (W ** 2)
+            candidate = (compute_cost, padding, k)
             
             if best_candidate is None or candidate < best_candidate:
                 best_candidate = candidate
                 best_window = W
                 
-            if padding == 0:
-                break
-            
         return (best_window,)
 
 class DrawViTPose_lhy:
@@ -1246,6 +1247,89 @@ class RequestURL:
         resp = requests.get(_url)
         return (any, resp.text)
 
+class DynamicParameterPanel:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "config_json": ("STRING", {
+                    "multiline": True,
+                    "placeholder": "JSON Configuration",
+                    "default": '{\n  "Prompt": {\n    "type": "STRING",\n    "multiline": true,\n    "placeholder": "write your prompts here"\n  },\n  "Steps": {\n    "type": "INT",\n    "default": 30,\n    "min": 10\n  },\n  "cfg_scale": {\n    "type": "FLOAT",\n    "name": "CFG Scale",\n    "default": 7.0,\n    "min": 1.0,\n    "max": 20.0,\n    "step": 0.05,\n    "precision": 2,\n    "display": "slider"\n  },\n  "Model": {\n    "type": "COMBO",\n    "values": ["SD1.5","SDXL"],\n    "default": "SDXL"\n  },\n  "Lora": {\n    "type": "COMBO",\n    "folder": "loras"\n  },\n  "hires_fix": {\n    "type": "BOOLEAN",\n    "name": "Hires Fix",\n    "default": false,\n    "tooltip": "Whether to run 2-pass sampling."\n  }\n}'
+                }),
+                "is_locked": ("BOOLEAN", {"default": False}),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+                "prompt": "PROMPT"
+            }
+        }
+    
+    RETURN_TYPES = tuple(["*"] * 24)
+    RETURN_NAMES = tuple(["*"] * 24)
+    FUNCTION = "execute"
+    CATEGORY = "Custom/UI"
+    DESCRIPTION = "Dynamically generate native controls from the input JSON."
+    
+    # 使用这个类方法来绕过 ComfyUI 后端的严格类型检查
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        return True
+    
+    def execute(self, config_json, unique_id=None, prompt=None, **kwargs):
+        try:
+            config = json.loads(config_json)
+            
+            #if len(config) > 24:
+            #    raise ValueError(f"Too many keys ({len(config)}). Max allowed is 24!")
+            
+            results = []
+            raw_inputs = {}
+            if prompt is not None and unique_id is not None:
+                node_info = prompt.get(str(unique_id), {})
+                raw_inputs = node_info.get("inputs", {})
+                
+            for key, params in config.items():
+                if key in raw_inputs:
+                    val = raw_inputs[key]
+                elif key in kwargs:
+                    val = kwargs[key]
+                else:
+                    val = params.get("default", None)
+                    if params.get("type", "").upper() == "BOOLEAN" and val is None:
+                        val = True
+                        
+                expected_type = params.get("type", "STRING").upper()
+                precision = params.get("precision", None)
+                if val is not None:
+                    try:
+                        if expected_type == "INT":
+                            val = int(val)
+                        elif expected_type == "FLOAT":
+                            val = float(val)
+                            if precision is not None:
+                                val = round(val, int(precision))
+                        elif expected_type == "BOOLEAN":
+                            val = bool(val)
+                        elif expected_type == "STRING":
+                            val = str(val)
+                    except:
+                        pass
+                        
+                results.append(val)
+                
+            return tuple(results)
+        except Exception:
+            raise
+
+@PromptServer.instance.routes.get("/dynamic_panel/files/{folder}")
+async def get_models_list(request):
+    folder = request.match_info.get("folder")
+    if folder in folder_paths.folder_names_and_paths.keys():
+        files = folder_paths.get_filename_list(folder)
+        return web.json_response(files)
+    return web.json_response([], status=404)
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1278,6 +1362,7 @@ NODE_CLASS_MAPPINGS = {
     "DrawViTPose_lhy": DrawViTPose_lhy,
     "CodeableString": CodeableString,
     "RequestURL": RequestURL,
+    "DynamicParameterPanel": DynamicParameterPanel,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1310,4 +1395,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ControlNetName": "ControlNet Name",
     "DrawViTPose_lhy": "Draw ViT Pose",
     "RequestURL": "Request URL",
+    "DynamicParameterPanel": "Dynamic Parameter Panel",
 }
