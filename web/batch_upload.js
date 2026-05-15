@@ -106,8 +106,41 @@ async function uploadFilesToBatch(node, files) {
 app.registerExtension({
     name: "Comfy.BatchUploadNode",
     
+    async setup() {
+        document.addEventListener("paste", async (e) => {
+            const canvas = app.canvas;
+            if (!canvas) return;
+            
+            const node = canvas.current_node;
+            if (!node || node.comfyClass !== "LoadImageBatch") {
+                return;
+            }
+            
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            
+            const files = [];
+            for (const item of items) {
+                if (item.kind !== "file") continue;
+
+                const file = item.getAsFile();
+                if (!file) continue;
+                if (!file.type.startsWith("image/")) continue;
+                files.push(file);
+            }
+            
+            if (!files.length) return;
+            e.preventDefault();
+            await uploadFilesToBatch(node, files);
+        });
+    },
+
     nodeCreated(node) {
         if (node.comfyClass !== "LoadImageBatch") return;
+        
+        node.pasteFiles = async function(files) {
+            await uploadFilesToBatch(node, files);
+        };
         
         node.addWidget(
             "button",
@@ -148,6 +181,7 @@ app.registerExtension({
         };
         
         node.onPaste = function (e) {
+            console.log("ppp")
             if (e.clipboardData?.files?.length) {
                 uploadFilesToBatch(node, e.clipboardData.files);
                 return true;

@@ -1,14 +1,23 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
+function generateUUID() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        const v = c === "x" ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 const overlay = document.createElement("div");
 overlay.id = "bottom-drop-port";
 overlay.style.cssText = `
     display: none; 
     position: fixed;
     bottom: 0; left: 0; 
-    width: 100vw; height: 33.3vh;
-    background: rgba(0,0,0,0.6);
+    width: 100vw; height: 40vh;
+    background: rgba(0,0,0,0.5);
     z-index: 100000;
     pointer-events: none;
     display: flex;
@@ -22,22 +31,26 @@ overlay.style.cssText = `
     transition: transform 0.3s ease-out;
     transform: translateY(100%);
 `;
-
 document.body.appendChild(overlay);
 
-let dragCounter = 0;
 let targetNodes = [];
+let isShowing = false;
 
-function updateHorizontalLayout(nodes) {
+function updateLayout(nodes) {
     overlay.innerHTML = "";
-    
     targetNodes = [...nodes].sort((a, b) => {
         const tA = (a.title || a.comfyClass).toLowerCase();
         const tB = (b.title || b.comfyClass).toLowerCase();
-        return tA === tB ? a.id - b.id : tA.localeCompare(tB);
+        
+        return tA === tB
+        ? a.id - b.id
+        : tA.localeCompare(tB, undefined, {
+            numeric: true,
+            sensitivity: "base"
+        });
     });
-    
-    targetNodes.forEach((node, index) => {
+
+    targetNodes.forEach((node) => {
         const isBatch = node.comfyClass === "LoadImageBatch";
         const cell = document.createElement("div");
         cell.className = "drop-cell";
@@ -54,7 +67,7 @@ function updateHorizontalLayout(nodes) {
             background: rgba(255, 255, 255, 0.2);
             overflow: hidden;
         `;
-
+        
         const nodeTitle = node.title || node.type;
         const nodeId = node.id;
         cell.innerHTML = `
@@ -68,156 +81,136 @@ function updateHorizontalLayout(nodes) {
         `;
         overlay.appendChild(cell);
     });
-
     overlay.style.display = "flex";
-    setTimeout(() => {
-        overlay.style.transform = "translateY(0)";
-    }, 10);
-}
-
-function generateUUID() {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        const v = c === "x" ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-
-async function uploadSingle(file, node) {
-    const formData = new FormData();
-    formData.append("image", file);
-    formData.append("type", "input");
-    formData.append("overwrite", "true");
-    const res = await api.fetchApi("/upload/image", { method: "POST", body: formData });
-    if (res.ok) {
-        const data = await res.json();
-        const w = node.widgets.find(w => w.name === "image");
-        if (w) { w.value = data.name; w.callback?.(data.name); }
-    }
-}
-
-async function uploadBatch(files, node) {
-    const validFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
-    if (!validFiles.length) return;
-    
-    const widgets = node.widgets || [];
-    const appendWidget = widgets.find(w => w.name === "append");
-    const batchWidget = widgets.find(w => w.name === "batch");
-    
-    const isAppend = !!appendWidget?.value;
-    const currentBatch = batchWidget?.value;
-    const uuid = (isAppend && currentBatch && currentBatch !== "None") ? currentBatch : generateUUID();
-    const subfolder = `batch/${uuid}`;
-    
-    try {
-        await Promise.all(validFiles.map(file => {
-            const body = new FormData();
-            body.append("image", file);
-            body.append("subfolder", subfolder);
-            body.append("overwrite", "true");
-            body.append("type", "input");
-            return api.fetchApi("/upload/image", { method: "POST", body });
-        }));
-        
-        if (batchWidget) {
-            const values = batchWidget.options.values;
-            if (!values.includes(uuid)) values.unshift(uuid);
-            batchWidget.value = uuid;
-            batchWidget.callback?.(uuid);
-        }
-        
-        await api.fetchApi("/batch_preview/gen_batch", {
-            method: "POST",
-            body: JSON.stringify({ batch_folder: uuid }),
-        }).catch(e => console.log("Preview service not found, skipping."));
-        
-    } catch (err) {
-        console.error("Batch Upload Error:", err);
-    }
+    isShowing = true;
+    setTimeout(() => { overlay.style.transform = "translateY(0)"; overlay.style.opacity = "1"; }, 10);
 }
 
 function hideOverlay() {
-    dragCounter = 0; 
+    isShowing = false;
     overlay.style.transform = "translateY(100%)";
-    overlay.style.pointerEvents = "none";
-    setTimeout(() => {
-        if (dragCounter <= 0) {
-            overlay.style.display = "none";
-            overlay.innerHTML = "";
-        }
-    }, 400);
+    overlay.style.opacity = "0";
+    setTimeout(() => { if (!isShowing) overlay.style.display = "none"; }, 300);
 }
+    
+async function handleUpload(files, node) {
+    if (node.comfyClass === "LoadImageBatch") {
+        const validFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
+        if (!validFiles.length) return;
+        
+        const widgets = node.widgets || [];
+        const appendWidget = widgets.find(w => w.name === "append");
+        const batchWidget = widgets.find(w => w.name === "batch");
+        
+        const isAppend = !!appendWidget?.value;
+        const currentBatch = batchWidget?.value;
+        const uuid = (isAppend && currentBatch && currentBatch !== "None") ? currentBatch : generateUUID();
+        const subfolder = `batch/${uuid}`;
+        
+        try {
+            await Promise.all(validFiles.map(file => {
+                const body = new FormData();
+                body.append("image", file);
+                body.append("subfolder", subfolder);
+                body.append("overwrite", "true");
+                body.append("type", "input");
+                return api.fetchApi("/upload/image", { method: "POST", body });
+            }));
+            
+            if (batchWidget) {
+                const values = batchWidget.options.values;
+                if (!values.includes(uuid)) values.unshift(uuid);
+                batchWidget.value = uuid;
+                batchWidget.callback?.(uuid);
+            }
+            
+            await api.fetchApi("/batch_preview/gen_batch", {
+                method: "POST",
+                body: JSON.stringify({ batch_folder: uuid }),
+            }).catch(e => console.log("Preview service not found, skipping."));
+            
+        } catch (err) {
+            console.error("Batch Upload Error:", err);
+        }
+    } else {
+        const f = files[0];
+        if (!f || !f.type.startsWith("image/")) return;
+        const b = new FormData();
+        b.append("image", f);
+        b.append("overwrite", "true");
+        b.append("type", "input");
+        const res = await api.fetchApi("/upload/image", { method: "POST", body: b });
+        if (res.ok) {
+            const d = await res.json();
+            const w = node.widgets.find(x => x.name === "image");
+            if (w) { w.value = d.name; w.callback?.(d.name); }
+        }
+    }
+}
+
 
 app.registerExtension({
     name: "lhyNodes.PowerImageLoader",
     async setup() {
-        
         window.addEventListener("dragenter", (e) => {
             if (!e.dataTransfer.types.includes("Files")) return;
             const targetTypes = ["LoadImage", "LoadImageMask", "LoadImageOutput", "LoadImageBatch"];
+            const nodes = app.graph._nodes.filter(node => targetTypes.includes(node.type));
             
-            const nodes = app.graph._nodes.filter(node =>
-                targetTypes.includes(node.type)
-            );
-            if (nodes.length === 0) return;
-
-            e.preventDefault();
-            dragCounter++;
-            if (dragCounter === 1) {
-                updateHorizontalLayout(nodes);
-                overlay.style.pointerEvents = "auto"; 
+            if (nodes.length > 0 && !isShowing) {
+                updateLayout(nodes);
             }
         }, true);
 
         window.addEventListener("dragover", (e) => {
-            if (overlay.style.display === "none") return;
-            
-            e.preventDefault();
-            e.stopPropagation();
+            if (!isShowing) return;
 
-            if (e.clientY > window.innerHeight * 0.66) {
+            const isBottomZone = e.clientY > window.innerHeight * 0.6;
+
+            if (isBottomZone) {
+                e.preventDefault();
+                e.stopPropagation();
                 e.stopImmediatePropagation();
-            }
+                overlay.style.pointerEvents = "auto";
+                overlay.style.opacity = "1";
 
-            const cells = overlay.querySelectorAll(".drop-cell");
-            cells.forEach(cell => {
-                const rect = cell.getBoundingClientRect();
-                if (e.clientX >= rect.left && e.clientX <= rect.right &&
-                    e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                    cell.style.borderColor = "#4CAF50";
-                    cell.style.background = "rgba(76, 175, 80, 0.25)";
-                    cell.style.transform = "translateY(-5px) scale(1.02)";
-                    cell.style.boxShadow = "0 10px 20px rgba(0,0,0,0.3)";
-                } else {
-                    cell.style.borderColor = "rgba(255, 255, 255, 0.3)";
-                    cell.style.background = "rgba(255, 255, 255, 0.05)";
-                    cell.style.transform = "translateY(0) scale(1)";
-                    cell.style.boxShadow = "none";
+                const cells = overlay.querySelectorAll(".drop-cell");
+                cells.forEach(cell => {
+                    const r = cell.getBoundingClientRect();
+                    const isHover = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+                    if (isHover) {
+                        cell.style.borderColor = "#4CAF50";
+                        cell.style.background = "rgba(76, 175, 80, 0.25)";
+                        cell.style.transform = "translateY(-5px)";
+                        cell.style.boxShadow = "0 10px 20px rgba(0,0,0,0.3)";
+                    } else {
+                        cell.style.borderColor = "rgba(255, 255, 255, 0.3)";
+                        cell.style.background = "rgba(255, 255, 255, 0.05)";
+                        cell.style.transform = "translateY(0)";
+                        cell.style.boxShadow = "none";
+                    }
+                });
+            } else {
+                overlay.style.pointerEvents = "none";
+                overlay.style.opacity = "0.4";
+                
+                if (e.clientX <= 2 || e.clientY <= 2 || e.clientX >= window.innerWidth - 2 || e.clientY >= window.innerHeight - 2) {
+                    hideOverlay();
                 }
-            });
+            }
         }, true);
 
         window.addEventListener("dragleave", (e) => {
-            e.preventDefault();
-            
-            if (!e.relatedTarget || 
-                e.clientX <= 0 || 
-                e.clientY <= 0 || 
-                e.clientX >= window.innerWidth || 
-                e.clientY >= window.innerHeight) {
-                    
-                    hideOverlay();
-                }
+            if (!e.relatedTarget) {
+                hideOverlay();
+            }
         }, true);
 
         window.addEventListener("drop", async (e) => {
-            const isBottom = e.clientY > window.innerHeight * 0.66;
-            const files = e.dataTransfer.files;
-            
-            if (overlay.style.display !== "none" && isBottom) {
+            if (!isShowing) return;
+
+            const isBottom = e.clientY > window.innerHeight * 0.6;
+            if (isBottom) {
                 e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
                 
                 const cells = overlay.querySelectorAll(".drop-cell");
@@ -226,22 +219,14 @@ app.registerExtension({
                     const r = c.getBoundingClientRect();
                     if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) targetIndex = i;
                 });
-                
+
                 if (targetIndex !== -1) {
-                    const node = targetNodes[targetIndex];
-                    if (node.comfyClass === "LoadImageBatch") {
-                        await uploadBatch(files, node);
-                    } else {
-                        await uploadSingle(files[0], node);
-                    }
+                    await handleUpload(e.dataTransfer.files, targetNodes[targetIndex]);
                 }
             }
-            dragCounter = 0;
             hideOverlay();
         }, true);
 
-        window.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") hideOverlay();
-        });
+        window.addEventListener("keydown", (e) => { if (e.key === "Escape") hideOverlay(); });
     }
 });
