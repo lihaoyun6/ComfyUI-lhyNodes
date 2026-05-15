@@ -3,6 +3,78 @@ import { ComfyWidgets } from "../../scripts/widgets.js";
 
 app.registerExtension({
     name: "lhyNodes.DynamicParameterPanel",
+    
+    setup() {
+        const originalGraphToPrompt = app.graphToPrompt;
+        
+        app.graphToPrompt = async function () {
+            const res = await originalGraphToPrompt.apply(this, arguments);
+            const prompt = res.output; 
+            
+            try {
+                const unpackers = app.graph.findNodesByType("ParameterUnpacker");
+                const panels = app.graph.findNodesByType("DynamicParameterPanel");
+                
+                const replaceMap = {};
+                
+                unpackers.forEach(u => {
+                    if (!u.inputs || !u.inputs[0].link) return;
+                    const link = app.graph.links[u.inputs[0].link];
+                    if (!link) return;
+                    
+                    const panel = app.graph.getNodeById(link.origin_id);
+                    if (!panel || panel.type !== "DynamicParameterPanel") return;
+                    
+                    const jsonW = panel.widgets.find(w => w.name === "config_json");
+                    if (!jsonW) return;
+                    
+                    let config;
+                    try { config = JSON.parse(jsonW.value); } catch(e) { return; }
+                    const entries = Object.entries(config).slice(0, 24);
+                    
+                    replaceMap[String(u.id)] = {};
+                    
+                    entries.forEach(([key, params], slotIdx) => {
+                        const widget = panel.widgets.find(w => w.name === key);
+                        let val = widget ? widget.value : params.default;
+                            
+                            const type = (params.type || "STRING").toUpperCase();
+                            if (type === "INT") val = Math.round(Number(val));
+                            else if (type === "FLOAT") val = Number(val);
+                            else if (type === "BOOLEAN") val = Boolean(val);
+                            else if (type === "STRING") val = String(val);
+                            
+                            replaceMap[String(u.id)][slotIdx] = val;
+                    });
+                });
+                
+                for (const nodeId in prompt) {
+                    const node = prompt[nodeId];
+                    if (node && node.inputs) {
+                        for (const [inKey, inVal] of Object.entries(node.inputs)) {
+                            if (Array.isArray(inVal) && inVal.length === 2) {
+                                const sourceId = String(inVal[0]);
+                                const sourceSlot = inVal[1];
+                                
+                                if (replaceMap[sourceId] && replaceMap[sourceId][sourceSlot] !== undefined) {
+                                    node.inputs[inKey] = replaceMap[sourceId][sourceSlot];
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                unpackers.forEach(u => delete prompt[String(u.id)]);
+                panels.forEach(p => delete prompt[String(p.id)]);
+                
+            } catch(e) {
+                console.error("[DynamicPanel] Graph interception failed:", e);
+            }
+            
+            return res; 
+        };
+    },
+    
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "DynamicParameterPanel") {
             

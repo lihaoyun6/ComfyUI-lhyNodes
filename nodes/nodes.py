@@ -13,7 +13,7 @@ import numpy as np
 from server import PromptServer
 from aiohttp import web
 from yarl import URL
-from nodes import MAX_RESOLUTION, VAELoader
+from nodes import MAX_RESOLUTION, VAELoader, LoadImage
 from ultralytics import YOLO
 from ..utils.cqdm import cqdm
 from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
@@ -365,7 +365,7 @@ class YoloFaceReformer:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/WanAnimate"
+    CATEGORY = "lhyNodes/WanAnimate"
     DESCRIPTION = "Remove faceless frames from the facial frame sequence and restore its coherence."
     
     def process(self, images, threshold, batch_size, enabled):
@@ -413,7 +413,7 @@ class PoseReformer:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/WanAnimate"
+    CATEGORY = "lhyNodes/WanAnimate"
     DESCRIPTION = "Automatically reuse the previous detected pose when none is found in current frame."
     
     def process(self, images, enabled):
@@ -443,7 +443,7 @@ class CudaDevicePatcher:
     RETURN_NAMES = ("any", "original")
     OUTPUT_NODE = True
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = 'Modify the value of the environment variable "CUDA_VISIBLE_DEVICES" during runtime.'
     
     def main(self, any, device):
@@ -460,7 +460,7 @@ class noneNode:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("None",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = 'Do nothing, just output Python object "None".'
     
     def main(self):
@@ -474,7 +474,7 @@ class AnyToAny:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("any",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "A pass-through node."
     
     def main(self, any):
@@ -501,7 +501,7 @@ class QueueHandler:
     RETURN_TYPES = (any_type, any_type)
     RETURN_NAMES = ("trigger", "any")
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Control the execution order of downstream nodes through trigger value."
     
     def main(self, trigger, any, pause, unique_id):
@@ -536,7 +536,7 @@ class GrowMask_lhy:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("mask",)
     FUNCTION = "process"
-    CATEGORY = 'lhyNode/Mask'
+    CATEGORY = 'lhyNodes/Mask'
     DESCRIPTION = "Grew masks at an extremely fast speed."
     
     def process(self, mask, expand_by, tapered_corners, batch_size, device):
@@ -593,7 +593,7 @@ class DrawMaskOnImage_lhy:
     RETURN_TYPES = ("IMAGE", )
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/Mask"
+    CATEGORY = "lhyNodes/Mask"
     
     def process(self, image, mask, color, device="cpu"):
         target_device = torch.device("cuda") if device == "gpu" else torch.device("cpu")
@@ -655,7 +655,7 @@ class BlockifyMask_lhy:
     RETURN_TYPES = ("MASK", )
     RETURN_NAMES = ("mask",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/Mask"
+    CATEGORY = "lhyNodes/Mask"
     
     def process(self, masks, block_size, device="cpu"):
         B, H, W = masks.shape
@@ -709,7 +709,7 @@ class WanAnimateMaskPreprocessor:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "process"
-    CATEGORY = 'lhyNode/Wan'
+    CATEGORY = 'lhyNodes/Wan'
     DESCRIPTION = 'All-in-one Wan Animate mask preprocessor.'
     
     def process(self, image, mask, expand_by, tapered_corners, block_size, color, batch_size, device):
@@ -810,7 +810,7 @@ class ImageOverlay_lhy:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/Image"
+    CATEGORY = "lhyNodes/Image"
     
     def process(self, source_image, overlay_image, blend_mode, opacity, scale_to_fill, invert_mask, optional_mask=None):
         B, H, W, C = source_image.shape
@@ -941,7 +941,7 @@ class WanAnimateBestFrameWindow:
     RETURN_TYPES = ("INT",)
     RETURN_NAMES = ("frame_window_size",)
     FUNCTION = "process"
-    CATEGORY = "lhyNode/Wan"
+    CATEGORY = "lhyNodes/Wan"
     DESCRIPTION = 'Calculate the optimal frame window size based on the total frames count.'
     
     def process(self, frame_count, force_size):
@@ -997,7 +997,7 @@ class DrawViTPose_lhy:
     RETURN_TYPES = ("IMAGE", )
     RETURN_NAMES = ("pose_images", )
     FUNCTION = "process"
-    CATEGORY = "lhyNode/Wan"
+    CATEGORY = "lhyNodes/Wan"
     DESCRIPTION = "Draw pose images from pose data using less memory."
     
     def process(self, pose_data, width, height, body_stick_width, hand_stick_width, draw_head, retarget_padding=64):
@@ -1044,7 +1044,7 @@ class CheckpointName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("ckpt_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected Checkpoint."
     SEARCH_ALIASES = ["load model", "checkpoint", "model loader", "load checkpoint", "ckpt", "model"]
     
@@ -1065,7 +1065,7 @@ class UNETName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("unet_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected UNet."
     
     def main(self, unet_name):
@@ -1086,7 +1086,7 @@ class UNETNameGGUF:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("unet_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected UNet."
     
     def main(self, unet_name):
@@ -1106,7 +1106,7 @@ class LoraName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("lora_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected LoRA."
     SEARCH_ALIASES = ["lora", "load lora", "apply lora", "lora loader", "lora model"]
     
@@ -1121,7 +1121,7 @@ class VAEName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("vae_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected VAE."
     
     def main(self, vae_name):
@@ -1135,7 +1135,7 @@ class CLIPName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("clip_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected CLIP."
     
     def main(self, clip_name):
@@ -1149,7 +1149,7 @@ class CLIPNameGGUF:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("clip_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected CLIP."
     
     def main(self, clip_name):
@@ -1163,7 +1163,7 @@ class CLIPVisionName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("clip_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected CLIP Vision model."
     
     def main(self, clip_name):
@@ -1177,7 +1177,7 @@ class ControlNetName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("control_net_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected ControlNet model."
     SEARCH_ALIASES = ["controlnet", "control net", "cn", "load controlnet", "controlnet loader"]
     
@@ -1192,7 +1192,7 @@ class UpscaleModelName:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("model_name",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Output the name of the selected upscale model."
     
     def main(self, model_name):
@@ -1210,15 +1210,19 @@ class CodeableString:
             "trim_empty_lines": ("BOOLEAN", {
                 "default": True,
                 "tooltip": "Remove all blank lines."
-            })
-        }}
+            }),
+        },
+        "optional": {
+            "prev": ("STRING", {"forceInput": True}),
+        }
+    }
     
     RETURN_TYPES = ("STRING",)
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Advanced string node that support comments."
     
-    def main(self, value, trim_empty_lines):
+    def main(self, value, trim_empty_lines, prev=None):
         text = re.sub(r"'''[\s\S]*?'''", "", value)
         text = re.sub(r"^\s*#.*$", "", text, flags=re.MULTILINE)
         text = re.sub(r"#.*", "", text)
@@ -1226,6 +1230,8 @@ class CodeableString:
         if trim_empty_lines:
             text = re.sub(r"^\s*\n", "", text, flags=re.MULTILINE)
         text = text.strip()
+        if prev:
+            text = text.format(prev)
         return (text,)
 
 class RequestURL:
@@ -1239,7 +1245,7 @@ class RequestURL:
     RETURN_TYPES = (any_type, "STRING")
     RETURN_NAMES = ("any", "resp")
     FUNCTION = "main"
-    CATEGORY = "lhyNode/Utils"
+    CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "."
     
     def main(self, any, url):
@@ -1268,7 +1274,7 @@ class DynamicParameterPanel:
     RETURN_TYPES = ("DYNAMIC_PARAMS",)
     RETURN_NAMES = ("params_bundle",)
     FUNCTION = "execute"
-    CATEGORY = "Custom/UI"
+    CATEGORY = "lhyNodes/UI"
     DESCRIPTION = "Dynamically generate native controls from the input JSON."
     
     # 使用这个类方法来绕过 ComfyUI 后端的严格类型检查
@@ -1323,7 +1329,7 @@ class ParameterUnpacker:
     RETURN_TYPES = tuple(["*"] * 32)
     RETURN_NAMES = tuple(["*"] * 32)
     FUNCTION = "unpack"
-    CATEGORY = "Custom/UI"
+    CATEGORY = "lhyNodes/UI"
     
     def unpack(self, params_bundle=None):
         try:
