@@ -4,10 +4,13 @@ import json
 import torch
 import zipfile
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageSequence
 from PIL.PngImagePlugin import PngInfo
 
+import comfy
 import folder_paths
+import node_helpers
+from comfy_api.latest import InputImpl
 from ..utils.cqdm import cqdm
 
 class ImageBatchtoImageList:
@@ -16,7 +19,6 @@ class ImageBatchtoImageList:
         return {
             "required": {
                 "image_batch": ("image_batch", ),
-                "fill_color": ("COLOR_CODE", {"default": "#000000"}),
             },
         }
     
@@ -26,26 +28,48 @@ class ImageBatchtoImageList:
     FUNCTION = "convert"
     CATEGORY = "lhyNodes/Image"
     
-    def convert(self, image_batch, fill_color):
-        image_list = []
-        mask_list = []
+    def convert(self, image_batch):
+        dtype = comfy.model_management.intermediate_dtype()
+        device = comfy.model_management.intermediate_device()
         
-        for img in image_batch:
-            hex_color = fill_color.lstrip("#")
-            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-            
-            rgba_img = img.convert("RGBA")
-            background = Image.new("RGB", rgba_img.size, (r, g, b))
-            background.paste(rgba_img, (0, 0), mask=rgba_img.split()[3])
-            
-            rgb_np = np.array(background).astype(np.float32) / 255.0
-            alpha_np = np.array(rgba_img)[:, :, 3].astype(np.float32) / 255.0
-            
-            image_list.append(torch.from_numpy(rgb_np).unsqueeze(0))
-            mask_list.append(1.0 - torch.from_numpy(alpha_np).unsqueeze(0))
-            del rgba_img, background, rgb_np, alpha_np
-            
-        return (image_list, mask_list)
+        output_images = []
+        output_masks = []
+        
+        for image_path in image_batch:
+            components = InputImpl.VideoFromFile(image_path).get_components()
+            if components.images.shape[0] > 0:
+                output_images.append(components.images.to(device=device, dtype=dtype))
+                output_masks.append((1.0 - components.alpha[..., -1]).to(device=device, dtype=dtype) if components.alpha is not None else torch.zeros((components.images.shape[0], 64, 64), dtype=dtype, device=device))
+            else:
+                img = node_helpers.pillow(Image.open, image_path)
+                
+                output_images = []
+                output_masks = []
+                w, h = None, None
+                
+                for i in ImageSequence.Iterator(img):
+                    i = node_helpers.pillow(ImageOps.exif_transpose, i)
+                    
+                    image = i.convert("RGB")
+                    
+                    if len(output_images) == 0:
+                        w = image.size[0]
+                        h = image.size[1]
+                        
+                    if image.size[0] != w or image.size[1] != h:
+                        continue
+                    
+                    image = np.array(image).astype(np.float32) / 255.0
+                    image = torch.from_numpy(image)[None,]
+                    if 'A' in i.getbands():
+                        mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                        mask = 1. - torch.from_numpy(mask)
+                    else:
+                        mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
+                    output_images.append(image.to(dtype=dtype))
+                    output_masks.append(mask.unsqueeze(0).to(dtype=dtype))
+    
+        return (output_images, output_masks)
 
 class ImageBatchtoImages:
     @classmethod
@@ -82,8 +106,9 @@ class ImageBatchtoImages:
         hex_color = fill_color.lstrip("#")
         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
         
-        for i, _img in enumerate(image_batch):
-            img = _img.convert('RGBA')
+        for i, image_path in enumerate(image_batch):
+            img = Image.open(image_path)
+            img = ImageOps.exif_transpose(img).convert('RGBA')
             processed_img = img
             
             if img.size != (width, height):
@@ -157,17 +182,12 @@ class LoadImageBatch:
         
         if not files:
             raise ValueError("Empty batch folder")
-
+        
         image_list = []
-
-        for idx, filename in enumerate(files):
+        
+        for filename in files:
             img_path = os.path.join(target_dir, filename)
-            img = Image.open(img_path)
-            img = ImageOps.exif_transpose(img)
-            #processed_img = img.convert("RGB")
-            #img_np = np.array(processed_img).astype(np.float32) / 255.0
-            #image_tensor = torch.from_numpy(img_np)[None, ]
-            image_list.append(img)
+            image_list.append(img_path)
 
         return (image_list, len(image_list))
 
