@@ -1352,6 +1352,20 @@ async def get_models_list(request):
         return web.json_response(files)
     return web.json_response([], status=404)
 
+class LivePreviewer:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {}}
+    
+    RETURN_TYPES = ()
+    FUNCTION = "do_nothing"
+    CATEGORY = "PowerLoader"
+    
+    OUTPUT_NODE = True
+    
+    def do_nothing(self):
+        return ()
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1386,6 +1400,7 @@ NODE_CLASS_MAPPINGS = {
     "RequestURL": RequestURL,
     "DynamicParameterPanel": DynamicParameterPanel,
     "ParameterUnpacker": ParameterUnpacker,
+    "LivePreviewer": LivePreviewer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1420,4 +1435,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RequestURL": "Request URL",
     "DynamicParameterPanel": "Dynamic Parameter Panel",
     "ParameterUnpacker": "Parameter Unpacker",
+    "LivePreviewer": "Live Previewer",
 }
