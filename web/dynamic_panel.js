@@ -2,6 +2,22 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
 
+const findAllNodes = (nodes, type) => {
+    let found = [];
+    for (const node of nodes) {
+        if (!type || node.type === type) found.push(node);
+        if (node.subgraph && node.subgraph._nodes) {
+            found.push(...findAllNodes(node.subgraph._nodes, type));
+        } else if (typeof node.getInnerNodes === 'function') {
+            try {
+                const inner = node.getInnerNodes();
+                if (inner) found.push(...findAllNodes(inner, type));
+            } catch (e) {}
+        }
+    }
+    return found;
+};
+
 app.registerExtension({
     name: "lhyNodes.DynamicParameterPanel",
     
@@ -13,68 +29,73 @@ app.registerExtension({
             const prompt = res.output; 
             
             try {
-                const unpackers = app.graph.findNodesByType("ParameterUnpacker");
-                const panels = app.graph.findNodesByType("DynamicParameterPanel");
-                
+                const panelOutputs = {};
                 const replaceMap = {};
                 
-                unpackers.forEach(u => {
-                    if (!u.inputs || !u.inputs[0].link) return;
-                    const link = app.graph.links[u.inputs[0].link];
-                    if (!link) return;
-                    
-                    const panel = app.graph.getNodeById(link.origin_id);
-                    if (!panel || panel.type !== "DynamicParameterPanel") return;
-                    
-                    const jsonW = panel.widgets.find(w => w.name === "config_json");
-                    if (!jsonW) return;
-                    
-                    let config;
-                    try { config = JSON.parse(jsonW.value); } catch(e) { return; }
-                    
-                    const entries = Object.entries(config).slice(0, 32);
-                    
-                    const outputEntries = entries.filter(([k, p]) => {
-                        const t = (p.type || "STRING").toUpperCase();
-                        return t !== "BUTTON" && t !== "MUTER";
-                    });
-                    
-                    replaceMap[String(u.id)] = {};
-                    
-                    outputEntries.forEach(([key, params], slotIdx) => {
-                        const type = (params.type || "STRING").toUpperCase();
+                for (const [nodeId, node] of Object.entries(prompt)) {
+                    if (node.class_type === "DynamicParameterPanel") {
+                        const configJson = node.inputs?.config_json || "{}";
+                        let config = {};
+                        try { config = JSON.parse(configJson); } catch(e) {}
                         
-                        if (type === "INPUT") {
-                            const panelInputIdx = panel.inputs ? panel.inputs.findIndex(inp => inp.name === key) : -1;
-                            if (panelInputIdx !== -1 && panel.inputs[panelInputIdx].link) {
-                                const inLink = app.graph.links[panel.inputs[panelInputIdx].link];
-                                if (inLink) {
-                                    replaceMap[String(u.id)][slotIdx] = [String(inLink.origin_id), inLink.origin_slot];
+                        const entries = Object.entries(config).slice(0, 32).filter(([k, p]) => {
+                            const t = (p.type || "STRING").toUpperCase();
+                            return t !== "BUTTON" && t !== "MUTER";
+                        });
+                        
+                        panelOutputs[nodeId] = {};
+                        entries.forEach(([key, params], slotIdx) => {
+                            const type = (params.type || "STRING").toUpperCase();
+                            if (type === "INPUT") {
+                                const rawOpt = params.optional || false;
+                                const displayKey = rawOpt ? `${key} (opt)` : key;
+                                const inLink = node.inputs[displayKey];
+                                
+                                if (inLink && Array.isArray(inLink)) {
+                                    panelOutputs[nodeId][slotIdx] = inLink;
+                                } else {
+                                    if (rawOpt) {
+                                        panelOutputs[nodeId][slotIdx] = null;
+                                    } else {
+                                        alert(`Validation Error: Required input '${key}' is missing!`);
+                                        throw new Error(`Required input missing`);
+                                    }
                                 }
                             } else {
-                                if (params.optional) {
-                                    replaceMap[String(u.id)][slotIdx] = null;
+                                let val = node.inputs[key];
+                                if (val === undefined) val = params.default;
+                                if (type === "INT" || type === "SEED") val = Math.round(Number(val));
+                                else if (type === "FLOAT") val = Number(val);
+                                else if (type === "BOOLEAN") val = Boolean(val);
+                                else if (type === "STRING") val = String(val);
+                                panelOutputs[nodeId][slotIdx] = val;
+                            }
+                        });
+                    }
+                }
+                            
+                for (const [nodeId, node] of Object.entries(prompt)) {
+                    if (node.class_type === "ParameterUnpacker") {
+                        let panelId = null;
+                        if (node.inputs) {
+                            for (const val of Object.values(node.inputs)) {
+                                if (Array.isArray(val) && val.length === 2) {
+                                    panelId = String(val[0]);
+                                    break;
                                 }
                             }
-                        } else {
-                            const widget = panel.widgets.find(w => w.name === key);
-                            let val = widget ? widget.value : params.default;
-                                
-                            if (type === "INT" || type === "SEED") val = Math.round(Number(val));
-                            else if (type === "FLOAT") val = Number(val);
-                            else if (type === "BOOLEAN") val = Boolean(val);
-                            else if (type === "STRING") val = String(val);
-                            
-                            replaceMap[String(u.id)][slotIdx] = val;
                         }
-                    });
-                });
-                
-                for (const nodeId in prompt) {
-                    const node = prompt[nodeId];
-                    if (node && node.inputs) {
-                        for (const inKey of Object.keys(node.inputs)) {
-                            const inVal = node.inputs[inKey];
+                        if (panelId && panelOutputs[panelId]) {
+                            replaceMap[nodeId] = panelOutputs[panelId];
+                        }
+                    }
+                }
+                            
+                for (const [nodeId, node] of Object.entries(prompt)) {
+                    if (node.class_type === "DynamicParameterPanel" || node.class_type === "ParameterUnpacker") continue;
+                    
+                    if (node.inputs) {
+                        for (const [inKey, inVal] of Object.entries(node.inputs)) {
                             if (Array.isArray(inVal) && inVal.length === 2) {
                                 const sourceId = String(inVal[0]);
                                 const sourceSlot = inVal[1];
@@ -82,23 +103,24 @@ app.registerExtension({
                                 if (replaceMap[sourceId] && replaceMap[sourceId][sourceSlot] !== undefined) {
                                     const replaceVal = replaceMap[sourceId][sourceSlot];
                                     if (replaceVal === null) {
-                                        delete node.inputs[inKey]; 
+                                        delete node.inputs[inKey];
                                     } else {
-                                        node.inputs[inKey] = replaceVal; 
+                                        node.inputs[inKey] = replaceVal;
                                     }
                                 }
                             }
                         }
                     }
                 }
-                
-                unpackers.forEach(u => delete prompt[String(u.id)]);
-                panels.forEach(p => delete prompt[String(p.id)]);
-                
+                    
+                for (const nodeId of Object.keys(prompt)) {
+                    if (prompt[nodeId].class_type === "DynamicParameterPanel" || prompt[nodeId].class_type === "ParameterUnpacker") {
+                        delete prompt[nodeId];
+                    }
+                }
             } catch(e) {
                 console.error("[DynamicPanel] Graph interception failed:", e);
             }
-            
             return res; 
         };
     },
@@ -302,61 +324,20 @@ app.registerExtension({
                             });
                         } else if (type === "BYPASSER") {
                             const applyMuter = (v) => {
-                                if (!app.graph) return;
-                                
-                                const toStrArray = (val) => {
-                                    if (val === undefined || val === null) return null;
-                                    if (Array.isArray(val)) return val.map(x => String(x).trim());
-                                    return [String(val).trim()];
-                                };
-                                
-                                const targetIds = toStrArray(params.match_id);
-                                const targetTitles = toStrArray(params.match_title);
-                                
-                                const applyToNodes = (nodes) => {
-                                    if (!nodes) return;
-                                    for (const node of nodes) {
-                                        if (!node) continue;
-                                        
-                                        let isMatch = false;
-                                        const nodeId = String(node.id);
-                                        const nodeTitleStr = String(node.title || node.type).trim();
-                                        
-                                        const matchById = targetIds ? targetIds.includes(nodeId) : false;
-                                        const matchByTitle = targetTitles ? targetTitles.includes(nodeTitleStr) : false;
-                                        
-                                        if (targetIds && targetTitles) {
-                                            isMatch = matchById && matchByTitle;
-                                        } else if (targetIds) {
-                                            isMatch = matchById;
-                                        } else if (targetTitles) {
-                                            isMatch = matchByTitle;
-                                        }
-                                        
-                                        if (isMatch) {
-                                            node.mode = v ? 0 : 4; // 0=Enable, 2=Mute, 4=Bypass
-                                        }
-                                        
-                                        if (node.subgraph && node.subgraph._nodes) {
-                                            applyToNodes(node.subgraph._nodes);
-                                        } else if (typeof node.getInnerNodes === 'function') {
-                                            try {
-                                                const innerNodes = node.getInnerNodes();
-                                                if (innerNodes) applyToNodes(innerNodes);
-                                            } catch (e) {
-                                            }
-                                        }
-                                    }
-                                };
-                                
-                                try {
-                                    applyToNodes(app.graph._nodes);
-                                    app.graph.setDirtyCanvas(true, true);
-                                } catch (e) { console.error("[DynamicPanel] Muter execution error:", e); }
+                                const nodes = findAllNodes(app.graph._nodes, null); 
+                                const tIds = params.match_id ? (Array.isArray(params.match_id) ? params.match_id : [params.match_id]).map(String) : null;
+                                const tTitles = params.match_title ? (Array.isArray(params.match_title) ? params.match_title : [params.match_title]).map(String) : null;
+                                nodes.forEach(n => {
+                                    let match = false;
+                                    const nid = String(n.id);
+                                    const ntitle = String(n.title || n.type);
+                                    if (tIds && tTitles) match = tIds.includes(nid) && tTitles.includes(ntitle);
+                                    else if (tIds) match = tIds.includes(nid);
+                                    else if (tTitles) match = tTitles.includes(ntitle);
+                                    if (match) n.mode = v ? 0 : 4;
+                                });
                             };
-                            
-                            widget = this.addWidget("toggle", key, val ?? true, (v) => applyMuter(v), {});
-                            
+                            widget = this.addWidget("toggle", key, val, (v) => applyMuter(v), {});
                             setTimeout(() => applyMuter(widget.value), 300);
                         } else if (type === "INPUT") {
                             const inputClass = params.class ? String(params.class).toUpperCase() : "*";
@@ -367,9 +348,7 @@ app.registerExtension({
                             const backup = oldInputs.find(l => l.name === key);
                             if (backup) {
                                 const originNode = app.graph.getNodeById(backup.origin_id);
-                                if (originNode) {
-                                    originNode.connect(backup.origin_slot, this, newIdx);
-                                }
+                                if (originNode) originNode.connect(backup.origin_slot, this, newIdx);
                             }
                         }
 
@@ -378,11 +357,8 @@ app.registerExtension({
                             widget.tooltip = params.tooltip;
                             
                             if (storedValues) {
-                                // 找到当前 widget 在 this.widgets 中的索引
                                 const wIdx = this.widgets.indexOf(widget);
-                                if (wIdx !== -1 && storedValues[wIdx] !== undefined) {
-                                    widget.value = storedValues[wIdx];
-                                }
+                                if (wIdx !== -1 && storedValues[wIdx] !== undefined) widget.value = storedValues[wIdx];
                             }
                         }
                     }
