@@ -1,7 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-// 用来存储当前画布上所有的预览节点（允许用户建立多个）
 const previewNodes = new Set();
 const nodeTitles = new Set();
 let initialized = false
@@ -11,18 +10,15 @@ let currentProgress = "";
 app.registerExtension({
     name: "lhyNodes.LivePreviewer",
     
-    // 在节点被注册到 LiteGraph 引擎之前，修改它的行为
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "LivePreviewer") {
-            
-            // 节点被创建时的初始化钩子
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 if (onNodeCreated) onNodeCreated.apply(this, arguments);
                 
-                this.size = [300, 300]; // 默认大小
+                this.size = [300, 300];
                 this.resizable = true;
-                this.imgs = []; // ComfyUI 内部通过读取 this.imgs 数组来绘制图片
+                this.imgs = [];
                 
                 previewNodes.add(this);
             };
@@ -33,24 +29,40 @@ app.registerExtension({
                 previewNodes.delete(this);
             };
         }
+        
+        if (nodeData.name === "DynamicParameterPanel") {
+            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function () {
+                const r = onNodeCreated?.apply(this, arguments);
+                previewNodes.add(this);
+                return r;
+            };
+            
+            const onRemoved = nodeType.prototype.onRemoved;
+            nodeType.prototype.onRemoved = function () {
+                const r = onRemoved?.apply(this, arguments);
+                previewNodes.delete(this);
+                return r;
+            };
+        }
     },
     
     setup() {
-        // 监听实时预览二进制图片数据
         api.addEventListener("b_preview", (event) => {
             const blob = event.detail; 
             if (blob && previewNodes.size > 0) {
-                // 清理旧的 URL 以防内存泄漏
-                if (currentBlobUrl) {
-                    URL.revokeObjectURL(currentBlobUrl);
-                }
+                if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
                 
                 currentBlobUrl = URL.createObjectURL(blob);
                 
                 const img = new Image();
                 img.onload = () => {
-                    // 更新画布上所有的预览节点
                     previewNodes.forEach((node, index) => {
+                        if (node.type === "DynamicParameterPanel") {
+                            const pw = node.widgets.find(w => w.name === "live_preview");
+                            const enabled = pw?.value === true;
+                            if (!enabled) return;
+                        }
                         node.imgs = [img];
                         node.title = `${currentProgress}`;
                         node.setDirtyCanvas(true, true);

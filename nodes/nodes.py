@@ -1264,6 +1264,7 @@ class DynamicParameterPanel:
                     "default": '{\n  "Prompt": {\n    "type": "STRING",\n    "multiline": true,\n    "placeholder": "write your prompts here"\n  },\n  "Steps": {\n    "type": "INT",\n    "default": 30,\n    "min": 10\n  },\n  "cfg_scale": {\n    "type": "FLOAT",\n    "name": "CFG Scale",\n    "default": 7.0,\n    "min": 1.0,\n    "max": 20.0,\n    "step": 0.05,\n    "precision": 2,\n    "display": "slider"\n  },\n  "Model": {\n    "type": "COMBO",\n    "values": ["SD1.5","SDXL"],\n    "default": "SDXL"\n  },\n  "Lora": {\n    "type": "COMBO",\n    "folder": "loras"\n  },\n  "hires_fix": {\n    "type": "BOOLEAN",\n    "name": "Hires Fix",\n    "default": false,\n    "tooltip": "Whether to run 2-pass sampling."\n  }\n}'
                 }),
                 "is_locked": ("BOOLEAN", {"default": False}),
+                "live_preview": ("BOOLEAN", {"default": False}),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",

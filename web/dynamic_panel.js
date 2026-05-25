@@ -179,14 +179,17 @@ app.registerExtension({
                     const jsonW = this.widgets.find(w => w.name === "config_json");
                     const lockBtn = this.widgets.find(w => w.value === "btn_lock");
                     const updateBtn = this.widgets.find(w => w.value === "btn_update");
-                    
+                    const previewer = this.widgets.find(w => w.name === "live_preview");
+
                     if (isLocked) {
                         this.hideWidget(jsonW);
                         this.hideWidget(updateBtn);
+                        this.hideWidget(previewer);
                         if (lockBtn) lockBtn.name = "🔓 Unlock Configuration";
                     } else {
                         this.showWidget(jsonW);
                         this.showWidget(updateBtn);
+                        this.showWidget(previewer);
                         if (lockBtn) lockBtn.name = "🔒 Lock Configuration";
                     }
                     
@@ -208,6 +211,9 @@ app.registerExtension({
                 };
 
                 this.buildDynamicUI = async function(customJsonStr = null, isRestoring = false, storedValues = null) {
+                    this.imgs = [];
+                    this.setDirtyCanvas(true, true);
+                    
                     let jsonStr = customJsonStr || this.widgets.find(w => w.name === "config_json")?.value;
                     if (jsonStr === "") jsonStr = "{}";
                     if (!jsonStr) return;
@@ -219,9 +225,14 @@ app.registerExtension({
                     
                     const entries = Object.entries(config).slice(0, 32);
 
-                    const isStatic = (w) => {
-                        return w.name === "config_json" || w.name === "is_locked" || w.value === "btn_update" || w.value === "btn_lock";
-                    };
+                    const isStatic = (w) => (
+                        w.name === "config_json" || 
+                        w.name === "is_locked" || 
+                        w.name === "live_preview" || 
+                        w.value === "btn_update" || 
+                        w.value === "btn_lock"
+                    );
+                    
 
                     for (let i = this.widgets.length - 1; i >= 0; i--) {
                         if (!isStatic(this.widgets[i])) {
@@ -327,13 +338,32 @@ app.registerExtension({
                                 const nodes = findAllNodes(app.graph._nodes, null); 
                                 const tIds = params.match_id ? (Array.isArray(params.match_id) ? params.match_id : [params.match_id]).map(String) : null;
                                 const tTitles = params.match_title ? (Array.isArray(params.match_title) ? params.match_title : [params.match_title]).map(String) : null;
+                                const tGroups = params.match_group ? (Array.isArray(params.match_group) ? params.match_group : [params.match_group]).map(String) : null;
+                                
+                                const groupMatchedNodeIds = new Set();
+                                if (tGroups) {
+                                    const collectFromGraph = (graph) => {
+                                        if (!graph) return;
+                                        if (graph._groups) {
+                                            graph._groups.forEach(g => {
+                                                if (tGroups.includes(String(g.title).trim())) {
+                                                    g.recomputeInsideNodes();
+                                                    if (g._nodes) g._nodes.forEach(n => groupMatchedNodeIds.add(String(n.id)));
+                                                }
+                                            });
+                                        }
+                                        if (graph._nodes) graph._nodes.forEach(n => { if (n.subgraph) collectFromGraph(n.subgraph) });
+                                    };
+                                    collectFromGraph(app.graph);
+                                }
+                                
                                 nodes.forEach(n => {
                                     let match = false;
                                     const nid = String(n.id);
                                     const ntitle = String(n.title || n.type);
-                                    if (tIds && tTitles) match = tIds.includes(nid) && tTitles.includes(ntitle);
-                                    else if (tIds) match = tIds.includes(nid);
-                                    else if (tTitles) match = tTitles.includes(ntitle);
+                                    if (tIds) match = tIds.includes(nid);
+                                    if (tTitles) match = tTitles.includes(ntitle);
+                                    if (tGroups) match = groupMatchedNodeIds.has(nid);
                                     if (match) n.mode = v ? 0 : 4;
                                 });
                             };
