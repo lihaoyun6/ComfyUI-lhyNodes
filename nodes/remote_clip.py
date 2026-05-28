@@ -154,7 +154,7 @@ class RemoteVAEProxy:
             try:
                 self._sock = socket.create_connection((self.ip, self.port), timeout=10)
                 self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                log(f"Connected to VAE_{self.vae_id}@{self.ip}:{self.port}")
+                log(f"Connected to VAE_{self.clip_id}@{self.ip}:{self.port}")
             except Exception as e:
                 self._sock = None
                 raise RuntimeError(f"Connection failed: {e}")
