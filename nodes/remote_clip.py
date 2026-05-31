@@ -207,6 +207,10 @@ class RemoteClipServer:
     OUTPUT_NODE = True
     CATEGORY = "Remote Server"
     
+    @classmethod
+    def IS_CHANGED(self, **kwargs):
+        return float("NaN")
+    
     def main(self, bind_ip, listen_port, **kwargs):
         clips = {0: kwargs.get("clip_1"), 1: kwargs.get("clip_2"), 2: kwargs.get("clip_3"), 3: kwargs.get("clip_4")}
         vaes = {0: kwargs.get("vae_1"), 1: kwargs.get("vae_2"), 2: kwargs.get("vae_3"), 3: kwargs.get("vae_4")}
@@ -313,12 +317,12 @@ class RemoteClipClient:
     def main(self, worker_ip, port, refesh):
         clip1 = RemoteCLIPProxy(worker_ip, port, clip_id=0)
         clip2 = RemoteCLIPProxy(worker_ip, port, clip_id=1)
-        clip3 = RemoteCLIPProxy(worker_ip, port, clip_id=3)
-        clip4 = RemoteCLIPProxy(worker_ip, port, clip_id=4)
+        clip3 = RemoteCLIPProxy(worker_ip, port, clip_id=2)
+        clip4 = RemoteCLIPProxy(worker_ip, port, clip_id=3)
         vae1 = RemoteVAEProxy(worker_ip, port, vae_id=0)
         vae2 = RemoteVAEProxy(worker_ip, port, vae_id=1)
-        vae3 = RemoteVAEProxy(worker_ip, port, vae_id=3)
-        vae4 = RemoteVAEProxy(worker_ip, port, vae_id=4)
+        vae3 = RemoteVAEProxy(worker_ip, port, vae_id=2)
+        vae4 = RemoteVAEProxy(worker_ip, port, vae_id=3)
         return (clip1, clip2, clip3, clip4, vae1, vae2, vae3, vae4)
 
 NODE_CLASS_MAPPINGS = {

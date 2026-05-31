@@ -17,7 +17,9 @@ from nodes import MAX_RESOLUTION, VAELoader, LoadImage
 from ultralytics import YOLO
 from ..utils.cqdm import cqdm
 from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
+
 import folder_paths
+import comfy.utils
 import comfy.model_management as mm
 
 class AnyType(str):
@@ -1367,6 +1369,64 @@ class LivePreviewer:
     def do_nothing(self):
         return ()
 
+class ImageScaleToTotalPixelsAdv:
+    upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
+    crop_methods = ["disabled", "center"]
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "upscale_method": (cls.upscale_methods,),
+                "megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 64.0, "step": 0.01}),
+                "divisible_by": ("INT",{"default": 1, "min": 1, "max": 512, "step": 1}),
+                "crop_method": (cls.crop_methods,),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "execute"
+    CATEGORY = "lhyNodes/Image"
+    
+    def execute(self, image, upscale_method, megapixels, divisible_by, crop_method):
+        samples = image.movedim(-1, 1)
+        total = megapixels * 1024 * 1024
+        
+        scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
+        width = round(samples.shape[3] * scale_by / divisible_by) * divisible_by
+        height = round(samples.shape[2] * scale_by / divisible_by) * divisible_by
+        
+        s = comfy.utils.common_upscale(samples, int(width), int(height), upscale_method, crop_method)
+        s = s.movedim(1, -1)
+        return (s,)
+    
+class ImageOffset:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "offset": ("INT",{"default": 0, "min": 0, "max": -10000, "step": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "execute"
+    CATEGORY = "lhyNodes/Image"
+    
+    def execute(self, image, offset):
+        if offset == 0:
+            return (image,)
+        
+        samples = image.movedim(-1, 1)
+        width = max(1,(samples.shape[3] + offset))
+        height = max(1,(samples.shape[2]  + offset))
+        
+        s = comfy.utils.common_upscale(samples, width, height, "nearest-exact", "center")
+        s = s.movedim(1, -1)
+        return (s,)
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1402,6 +1462,8 @@ NODE_CLASS_MAPPINGS = {
     "DynamicParameterPanel": DynamicParameterPanel,
     "ParameterUnpacker": ParameterUnpacker,
     "LivePreviewer": LivePreviewer,
+    "ImageScaleToTotalPixelsAdv": ImageScaleToTotalPixelsAdv,
+    "ImageOffset": ImageOffset,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1437,4 +1499,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DynamicParameterPanel": "Dynamic Parameter Panel",
     "ParameterUnpacker": "Parameter Unpacker",
     "LivePreviewer": "Live Previewer",
+    "ImageOffset": "Image Offset",
 }
