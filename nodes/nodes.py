@@ -1,10 +1,12 @@
 import os
 import re
+import gc
 import cv2
 import json
 import math
 import time
 import random
+import hashlib
 import requests
 import torch
 import torch.nn.functional as F
@@ -19,6 +21,7 @@ from ..utils.cqdm import cqdm
 from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
 
 import folder_paths
+import comfy.sd
 import comfy.utils
 import comfy.model_management as mm
 
@@ -44,6 +47,7 @@ update_folder_names_and_paths("unet_gguf", ["diffusion_models", "unet"])
 update_folder_names_and_paths("clip_gguf", ["text_encoders", "clip"])
 
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+cache_dir = os.path.join(current_dir, "res", "text_embed_cache")
 
 class MaskToSAMCoords:
     @classmethod
@@ -1407,7 +1411,7 @@ class ImageOffset:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "offset": ("INT",{"default": 0, "min": 0, "max": -10000, "step": 1}),
+                "offset": ("INT",{"default": 0, "min": -10000, "max": 0, "step": 1}),
             }
         }
     
@@ -1426,6 +1430,102 @@ class ImageOffset:
         s = comfy.utils.common_upscale(samples, width, height, "nearest-exact", "center")
         s = s.movedim(1, -1)
         return (s,)
+
+class CLIPTextEncodeCached:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "clip_name": (folder_paths.get_filename_list("text_encoders"), ),
+                "type": (["stable_diffusion", "stable_cascade", "sd3", "stable_audio", "mochi", "ltxv", "pixart", "cosmos", "lumina2", "wan", "hidream", "chroma", "ace", "omnigen2", "qwen_image", "hunyuan_image", "flux2", "ovis", "longcat_image", "cogvideox", "lens", "pixeldit", "ideogram4", "boogu"], ),
+                "positive_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
+                "negative_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
+                "disk_cache": ("BOOLEAN", {"default": True, "tooltip": "Cache the text embeddings to disk for faster re-use"}),
+            },
+            "optional": {
+                "device": (["default", "cpu"], {"advanced": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("positive", "negative")
+    FUNCTION = "process"
+    
+    CATEGORY = "lhyNodes/Conditioning"
+    
+    def get_hash(self, clip_name, clip_type, text):
+        h = hashlib.sha256()
+        h.update(clip_name.encode('utf-8'))
+        h.update(clip_type.encode('utf-8'))
+        h.update(text.strip().encode('utf-8'))
+        return h.hexdigest()
+    
+    def load_clip(self, clip_name, type_str, device):
+        clip_type = getattr(comfy.sd.CLIPType, type_str.upper(), comfy.sd.CLIPType.STABLE_DIFFUSION)
+        model_options = {}
+        if device == "cpu":
+            model_options["load_device"] = model_options["offload_device"] = torch.device("cpu")
+            
+        clip_path = folder_paths.get_full_path_or_raise("text_encoders", clip_name)
+        clip = comfy.sd.load_clip(
+            ckpt_paths=[clip_path], 
+            embedding_directory=folder_paths.get_folder_paths("embeddings"), 
+            clip_type=clip_type, 
+            model_options=model_options
+        )
+        return clip
+    
+    def encode_text(self, clip, text):
+        tokens = clip.tokenize(text)
+        return clip.encode_from_tokens_scheduled(tokens)
+    
+    def process(self, clip_name, type, positive_prompt, negative_prompt, disk_cache, device="default"):
+        pos_hash = self.get_hash(clip_name, type, positive_prompt)
+        neg_hash = self.get_hash(clip_name, type, negative_prompt)
+        
+        pos_path = os.path.join(cache_dir, f"{pos_hash}.pt")
+        neg_path = os.path.join(cache_dir, f"{neg_hash}.pt")
+        
+        pos_cond = None
+        neg_cond = None
+
+        if disk_cache:
+            if os.path.exists(pos_path):
+                try:
+                    pos_cond = torch.load(pos_path, map_location="cpu")
+                    print(f"[Cached CLIP] Loading: {pos_hash}.pt")
+                except Exception as e:
+                    print(f"[Cached CLIP] DiskCache loading failed: {e}")
+                    
+            if os.path.exists(neg_path):
+                try:
+                    neg_cond = torch.load(neg_path, map_location="cpu")
+                    print(f"[Cached CLIP] Loading: {neg_hash}.pt")
+                except Exception as e:
+                    print(f"[Cached CLIP] DiskCache loading failed: {e}")
+                    
+        if pos_cond is None or neg_cond is None:
+            clip = self.load_clip(clip_name, type, device)
+            
+            if pos_cond is None:
+                pos_cond = self.encode_text(clip, positive_prompt)
+                if disk_cache:
+                    torch.save(pos_cond, pos_path)
+                    print(f"[Cached CLIP] Saving: {pos_hash}.pt")
+            
+            if neg_cond is None:
+                neg_cond = self.encode_text(clip, negative_prompt)
+                if disk_cache:
+                    torch.save(neg_cond, neg_path)
+                    print(f"[Cached CLIP] Saving: {neg_hash}.pt")
+                    
+            
+            print("[Cached CLIP] Unloading text_encoder...")
+            del clip
+            gc.collect()
+            mm.soft_empty_cache()
+                
+        return (pos_cond, neg_cond)
 
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
@@ -1464,6 +1564,7 @@ NODE_CLASS_MAPPINGS = {
     "LivePreviewer": LivePreviewer,
     "ImageScaleToTotalPixelsAdv": ImageScaleToTotalPixelsAdv,
     "ImageOffset": ImageOffset,
+    "CLIPTextEncodeCached": CLIPTextEncodeCached,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1499,5 +1600,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DynamicParameterPanel": "Dynamic Parameter Panel",
     "ParameterUnpacker": "Parameter Unpacker",
     "LivePreviewer": "Live Previewer",
+    "ImageScaleToTotalPixelsAdv": "ImageScaleToTotalPixels",
     "ImageOffset": "Image Offset",
+    "CLIPTextEncodeCached": "CLIP Text Encode (Cached)",
 }
