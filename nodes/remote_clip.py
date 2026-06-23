@@ -86,7 +86,8 @@ class RemoteCLIPProxy:
             
         if self._sock is None:
             try:
-                self._sock = socket.create_connection((self.ip, self.port), timeout=10)
+                self._sock = socket.create_connection((self.ip, self.port), timeout=600)
+                self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                 self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 log(f"Connected to CLIP_{self.clip_id}@{self.ip}:{self.port}")
             except Exception as e:
@@ -152,7 +153,8 @@ class RemoteVAEProxy:
             
         if self._sock is None:
             try:
-                self._sock = socket.create_connection((self.ip, self.port), timeout=10)
+                self._sock = socket.create_connection((self.ip, self.port), timeout=600)
+                self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                 self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 log(f"Connected to VAE_{self.vae_id}@{self.ip}:{self.port}")
             except Exception as e:
@@ -229,6 +231,7 @@ class RemoteClipServer:
         
         def handle_client(conn, addr):
             with conn:
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                 while True:
                     try:
                         meta, blob = recv_packet(conn)
