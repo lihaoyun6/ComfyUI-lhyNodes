@@ -1440,7 +1440,6 @@ class CLIPTextEncodeCached:
                 "type": (["stable_diffusion", "stable_cascade", "sd3", "stable_audio", "mochi", "ltxv", "pixart", "cosmos", "lumina2", "wan", "hidream", "chroma", "ace", "omnigen2", "qwen_image", "hunyuan_image", "flux2", "ovis", "longcat_image", "cogvideox", "lens", "pixeldit", "ideogram4", "boogu"], ),
                 "positive_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
-                "force_unload": ("BOOLEAN", {"default": True, "tooltip": "Unload the text encoder model after use."}),
                 "disk_cache": ("BOOLEAN", {"default": True, "tooltip": "Cache the text embeddings to disk for faster re-use."}),
             },
             "optional": {
@@ -1480,7 +1479,7 @@ class CLIPTextEncodeCached:
         tokens = clip.tokenize(text)
         return clip.encode_from_tokens_scheduled(tokens)
     
-    def process(self, clip_name, type, positive_prompt, negative_prompt, force_unload, disk_cache, device="default"):
+    def process(self, clip_name, type, positive_prompt, negative_prompt, disk_cache, device="default"):
         pos_hash = self.get_hash(clip_name, type, positive_prompt)
         neg_hash = self.get_hash(clip_name, type, negative_prompt)
         
@@ -1519,9 +1518,8 @@ class CLIPTextEncodeCached:
                 if disk_cache:
                     torch.save(neg_cond, neg_path)
                     print(f"[Cached CLIP] Saving: {neg_hash}.pt")
-                    
-        if force_unload:
-            print("[Cached CLIP] Unloading text_encoder...")
+
+            print("[Cached CLIP] Unloading CLIP...")
             del clip
             gc.collect()
             mm.soft_empty_cache()
