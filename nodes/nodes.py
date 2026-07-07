@@ -1235,7 +1235,7 @@ class CodeableString:
         text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
         if trim_empty_lines:
             text = re.sub(r"^\s*\n", "", text, flags=re.MULTILINE)
-        text = text.strip()
+        #text = text.strip()
         if prev:
             text = text.format(prev)
         return (text,)
