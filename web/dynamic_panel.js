@@ -415,30 +415,31 @@ app.registerExtension({
                 this.outputs = [];
                 this.size = [200, 40];
                 
+                // 🔥【修复后】：安全智能同步，绝不误断现有连线
                 this.syncFromUpstream = function() {
+                    // 如果根本没有输入连线，清空输出槽
                     if (!this.inputs || !this.inputs[0].link) {
-                        if (this.outputs) {
+                        if (this.outputs && this.outputs.length > 0) {
                             for (let i = 0; i < this.outputs.length; i++) this.disconnectOutput(i);
+                            this.outputs = [];
+                            this.computeSize();
+                            this.setDirtyCanvas(true, true);
                         }
-                        this.outputs = [];
-                        this.computeSize();
-                        this.setDirtyCanvas(true, true);
                         return;
                     }
                     
                     const linkId = this.inputs[0].link;
-                    const link = app.graph.links[linkId];
-                    if (!link) return;
+                    const link = app.graph ? app.graph.links[linkId] : null;
+                    if (!link) return; // 全局连线未加载就绪，直接返回，绝不断开已有输出！
                     
                     const upstreamNode = app.graph.getNodeById(link.origin_id);
                     if (!upstreamNode || upstreamNode.type !== "DynamicParameterPanel") return;
                     
-                    const jsonWidget = upstreamNode.widgets.find(w => w.name === "config_json");
-                    if (!jsonWidget) return;
-                    const value = jsonWidget.value || "{}"
+                    const jsonWidget = upstreamNode.widgets?.find(w => w.name === "config_json");
+                    if (!jsonWidget || !jsonWidget.value) return; // 上游 UI 未就绪，直接返回！
                     
                     let config;
-                    try { config = JSON.parse(value); } catch (e) { return; }
+                    try { config = JSON.parse(jsonWidget.value || "{}"); } catch (e) { return; }
                     const entries = Object.entries(config).slice(0, 32);
                     
                     const outputEntries = entries.filter(([k, p]) => {
@@ -446,15 +447,51 @@ app.registerExtension({
                         return t !== "BUTTON" && t !== "BYPASSER";
                     });
                     
+                    // 校验现有输出槽结构是否发生改变
+                    const currentOutputs = this.outputs || [];
+                    let needsUpdate = currentOutputs.length !== outputEntries.length;
+                    if (!needsUpdate) {
+                        for (let i = 0; i < outputEntries.length; i++) {
+                            const [key] = outputEntries[i];
+                            if (currentOutputs[i].name !== key) {
+                                needsUpdate = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 💡【核心修复点】：如果输出槽结构没有改变（如加载/切换工作流时），仅更新标签和类型，绝不销毁连线！
+                    if (!needsUpdate) {
+                        outputEntries.forEach(([key, params], idx) => {
+                            const baseType = (params.type || "*").toUpperCase();
+                            let outputClass;
+                            if (params.class) { outputClass = String(params.class).toUpperCase() } 
+                            else if (baseType === "INPUT") { outputClass = "*"; } 
+                            else if (baseType === "SEED") { outputClass = "INT"; } 
+                            else { outputClass = baseType; }
+                            
+                            const displayName = params.name || key;
+                            if (this.outputs[idx]) {
+                                this.outputs[idx].type = outputClass;
+                                this.outputs[idx].label = displayName;
+                            }
+                        });
+                        this.setDirtyCanvas(true, true);
+                        return;
+                    }
+                    
+                    // 只有在面板参数真正增删修改时，才安全备份并重建
                     const oldLinks = [];
                     if (this.outputs) {
                         for (let i = 0; i < this.outputs.length; i++) {
                             const output = this.outputs[i];
                             if (output.links && output.links.length > 0) {
                                 const linksInfo = output.links.map(lId => {
-                                    const l = app.graph.links[lId];
-                                    return l ? { target_id: l.target_id, target_slot: l.target_slot } : null;
-                                }).filter(l => l);
+                                    const l = app.graph ? app.graph.links[lId] : null;
+                                    if (!l) return null;
+                                    const targetNode = app.graph.getNodeById(l.target_id);
+                                    return targetNode ? { targetNode, target_slot: l.target_slot } : null;
+                                }).filter(Boolean);
                                 oldLinks.push({ name: output.name, connections: linksInfo });
                                 this.disconnectOutput(i);
                             }
@@ -486,7 +523,9 @@ app.registerExtension({
                         const backup = oldLinks.find(l => l.name === key);
                         if (backup) {
                             backup.connections.forEach(conn => {
-                                this.connect(idx, conn.target_id, conn.target_slot);
+                                if (conn.targetNode) {
+                                    this.connect(idx, conn.targetNode, conn.target_slot);
+                                }
                             });
                         }
                     });

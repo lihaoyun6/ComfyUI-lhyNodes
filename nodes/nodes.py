@@ -485,19 +485,19 @@ class AnyToAny:
     
     def main(self, any):
         return (any,)
-    
+
+QueueHandler_States = {}
+
 class QueueHandler:
-    # "pause" code comes from: https://github.com/wywywywy/ComfyUI-pause/blob/main/PauseWorkflowNode.py
-    _instance = None  # Singleton pattern
-    status_by_id = {}
-        
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "trigger": (any_type,),
-                "any": (any_type,),
                 "pause": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                "any": (any_type,),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -510,11 +510,13 @@ class QueueHandler:
     CATEGORY = "lhyNodes/Utils"
     DESCRIPTION = "Control the execution order of downstream nodes through trigger value."
     
-    def main(self, trigger, any, pause, unique_id):
+    def main(self, trigger, pause, any, unique_id):
         if pause:
-            self.status_by_id[unique_id] = "paused"
+            QueueHandler_States[unique_id] = "paused"
+        else:
+            QueueHandler_States.pop(unique_id, None)
             
-        while self.status_by_id.get(unique_id,"") == "paused":
+        while QueueHandler_States.get(unique_id,"") == "paused":
             mm.throw_exception_if_processing_interrupted()
             time.sleep(0.2)
             
@@ -523,7 +525,7 @@ class QueueHandler:
 @PromptServer.instance.routes.post("/lhy_queuehandler/continue/{node_id}")
 async def handle_continue(request):
     node_id = request.match_info["node_id"].strip()
-    QueueHandler.status_by_id[node_id] = "continue"
+    QueueHandler_States[node_id] = "continue"
     return web.json_response({"status": "ok"})
 
 class GrowMask_lhy:

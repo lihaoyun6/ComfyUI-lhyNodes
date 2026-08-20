@@ -2,28 +2,24 @@ import os
 import io
 import math
 import zipfile
+import pkgutil
+import importlib
 import folder_paths
 from PIL import Image, ImageOps, ImageFilter, ImageDraw, ImageFont
 from aiohttp import web
 from server import PromptServer
 
-from .nodes.nodes import NODE_CLASS_MAPPINGS as MAIN_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as MAIN_NAME_MAPPINGS
-from .nodes.morse_nodes import NODE_CLASS_MAPPINGS as MORSE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as MORSE_NAME_MAPPINGS
-from .nodes.file_nodes import NODE_CLASS_MAPPINGS as FILE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as FILE_NAME_MAPPINGS
-from .nodes.remote_clip import NODE_CLASS_MAPPINGS as CLIP_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as CLIP_NAME_MAPPINGS
-
 WEB_DIRECTORY = "./web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
+nodes_package = importlib.import_module(f"{__name__}.nodes")
 
-NODE_CLASS_MAPPINGS.update(MAIN_CLASS_MAPPINGS)
-NODE_DISPLAY_NAME_MAPPINGS.update(MAIN_NAME_MAPPINGS)
-NODE_CLASS_MAPPINGS.update(MORSE_CLASS_MAPPINGS)
-NODE_DISPLAY_NAME_MAPPINGS.update(MORSE_NAME_MAPPINGS)
-NODE_CLASS_MAPPINGS.update(FILE_CLASS_MAPPINGS)
-NODE_DISPLAY_NAME_MAPPINGS.update(FILE_NAME_MAPPINGS)
-NODE_CLASS_MAPPINGS.update(CLIP_CLASS_MAPPINGS)
-NODE_DISPLAY_NAME_MAPPINGS.update(CLIP_NAME_MAPPINGS)
+for module in pkgutil.iter_modules(nodes_package.__path__):
+	if module.name.startswith("_"):
+		continue
+	mod = importlib.import_module(f"{__name__}.nodes.{module.name}")
+	NODE_CLASS_MAPPINGS.update(getattr(mod, "NODE_CLASS_MAPPINGS", {}))
+	NODE_DISPLAY_NAME_MAPPINGS.update(getattr(mod, "NODE_DISPLAY_NAME_MAPPINGS", {}))
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 
