@@ -6,20 +6,14 @@ app.registerExtension({
     name: "lhyNodes.LatentPreviewTinyVAE",
 
     init() {
-        // ============================================================
-        // 【核心】：监听 Python 在 return 之前通过 send_sync 发来的事件
-        // ============================================================
         api.addEventListener("tiny_vae_preview", (event) => {
             const { node_id, filename, subfolder, type } = event.detail;
-            
-            // 根据 node_id 准确找到对应的节点
             const node = app.graph.getNodeById(node_id);
 
-            if (node && node.previewImgEl) {
-                // 同步右键菜单元数据
-                node.images = [{ filename, subfolder, type, format: "webp" }];
+            if (node && node._previewMedia) {
+                const isVideo = filename.endsWith(".mp4") || filename.endsWith(".webm");
+                node.images = [{ filename, subfolder, type, format: isVideo ? "mp4" : "webp" }];
 
-                // 请求图片 URL，原生 HTML <img> 会立刻自动播放 WebP
                 const src = api.apiURL(
                     `/view?filename=${encodeURIComponent(filename)}` +
                     `&subfolder=${encodeURIComponent(subfolder || "")}` +
@@ -27,8 +21,25 @@ app.registerExtension({
                     `&t=${Date.now()}`
                 );
 
-                node.previewImgEl.src = src;
-                node.previewImgEl.style.display = "block";
+                const { imgEl, videoEl } = node._previewMedia;
+
+                if (isVideo) {
+                    // MP4 视频模式：开启 Video 播放器
+                    imgEl.style.display = "none";
+                    videoEl.src = src;
+                    videoEl.style.display = "block";
+                    videoEl.muted = true;
+                    videoEl.play().catch(() => {});
+                } else {
+                    // WebP 降级模式：切回 Image 标签
+                    videoEl.pause();
+                    videoEl.style.display = "none";
+                    videoEl.removeAttribute("src");
+                    videoEl.load();
+
+                    imgEl.src = src;
+                    imgEl.style.display = "block";
+                }
             }
         });
     },
@@ -45,13 +56,15 @@ app.registerExtension({
             // 1. 创建 DOM 容器
             const container = document.createElement("div");
             container.style.width = "100%";
+            container.style.height = "100%";
+            container.style.maxHeight = "100%";
             container.style.display = "flex";
             container.style.justifyContent = "center";
             container.style.alignItems = "center";
-            container.style.overflow = "visible";
-            //container.style.paddingBottom = "10px";
+            container.style.overflow = "hidden";
+            container.style.borderRadius = "4px";
 
-            // 2. 创建原生的 <img> 标签
+            // 2. 创建 <img> 标签（WebP 降级通道）
             const imgEl = document.createElement("img");
             imgEl.style.width = "100%";
             imgEl.style.height = "100%";
@@ -59,39 +72,26 @@ app.registerExtension({
             imgEl.style.display = "none";
             imgEl.draggable = false;
 
-            // 方便在 api.addEventListener 里通过 node.previewImgEl 快速访问
-            node.previewImgEl = imgEl;
+            // 3. 创建 <video> 标签（MP4 + 音频通道）
+            const videoEl = document.createElement("video");
+            videoEl.style.width = "100%";
+            videoEl.style.height = "100%";
+            videoEl.style.objectFit = "contain";
+            videoEl.style.display = "none";
+            videoEl.autoplay = true;
+            videoEl.loop = true;
+            videoEl.controls = true;
+
+            node._previewMedia = { imgEl, videoEl };
             container.appendChild(imgEl);
+            container.appendChild(videoEl);
 
-            // 辅助函数：更新容器高度
-            const updateContainerHeight = () => {
-                if (node.size) {
-                    const topOffset = container.offsetTop || 100;
-                    
-                    // 容器可用高度 = 节点现有高度 - 顶部控件高 - 底部按钮高
-                    const availableHeight = Math.max(node.size[1] - topOffset - 40, 40);
-                    container.style.height = `${availableHeight}px`;
-                }
-            };
-
-            // 3. 监听节点拖拽缩放
-            const origOnResize = node.onResize;
-            node.onResize = function (size) {
-                origOnResize?.apply(this, arguments);
-                updateContainerHeight();
-            };
-
-            // 4. 图片加载后，根据宽高比自动伸展节点高度
-            imgEl.onload = function () {
-                updateContainerHeight();
-                node.setDirtyCanvas(true, true);
-            };
-
-            // 5. 挂载为 DOM Widget
+            // 4. 挂载为 DOM Widget
             node.addDOMWidget("web_preview", "custom_preview_widget", container, {
                 serialize: false,
             });
-            
+
+            // 5. 添加 Continue 按钮
             node.addWidget("button", "Continue", "CONTINUE", () => {
                 postContinue(node.id);
             });

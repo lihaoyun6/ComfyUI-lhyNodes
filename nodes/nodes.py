@@ -12,6 +12,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
+
 from server import PromptServer
 from aiohttp import web
 from yarl import URL
@@ -20,6 +21,8 @@ from ultralytics import YOLO
 from ..utils.cqdm import cqdm
 from ..utils.human_visualization import draw_aapose_by_meta_new, resize_to_bounds, padding_resize
 
+import nodes
+import node_helpers
 import folder_paths
 import comfy.sd
 import comfy.utils
@@ -1528,6 +1531,23 @@ class CLIPTextEncodeCached:
                 
         return (pos_cond, neg_cond)
 
+class PreviewStringBypass():
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {"string": ("STRING", {"forceInput": True})},
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("string",)
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
+    FUNCTION = "main"
+    CATEGORY = "lhyNodes/Utilities"
+    
+    def main(self, string):
+        return {"ui": {"text": (string,)}, "result": (string,)}
+
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
     "MaskToSAMCoordsV2": MaskToSAMCoordsV2,
@@ -1566,6 +1586,7 @@ NODE_CLASS_MAPPINGS = {
     "ImageScaleToTotalPixelsAdv": ImageScaleToTotalPixelsAdv,
     "ImageOffset": ImageOffset,
     "CLIPTextEncodeCached": CLIPTextEncodeCached,
+    "PreviewStringBypass": PreviewStringBypass,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1604,4 +1625,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageScaleToTotalPixelsAdv": "ImageScaleToTotalPixels",
     "ImageOffset": "Image Offset",
     "CLIPTextEncodeCached": "CLIP Text Encode (Cached)",
+    "PreviewStringBypass": "Preview String (Bypass)",
 }
