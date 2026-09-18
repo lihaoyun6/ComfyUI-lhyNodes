@@ -1531,22 +1531,39 @@ class CLIPTextEncodeCached:
                 
         return (pos_cond, neg_cond)
 
-class PreviewStringBypass():
+class PreviewStringBypass:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": {"string": ("STRING", {"forceInput": True})},
+            "required": {
+                "cached_text": ("STRING", {"default": "", "multiline": True}),
+            },
+            "optional": {
+                "string": ("STRING", {"forceInput": True}),
+            },
         }
     
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("string",)
-    INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True,)
     FUNCTION = "main"
     CATEGORY = "lhyNodes/Utilities"
+    DESCRIPTION = "Preview and cache the input string."
     
-    def main(self, string):
-        return {"ui": {"text": (string,)}, "result": (string,)}
+    @classmethod
+    def IS_CHANGED(cls, cached_text="", string=None):
+        target = string if string is not None else cached_text
+        return str(target) if target is not None else ""
+    
+    def main(self, cached_text="", string=None):
+        if string is not None:
+            if isinstance(string, (list, tuple)):
+                current_text = "\n".join(str(s) for s in string)
+            else:
+                current_text = str(string)
+        else:
+            current_text = cached_text if cached_text is not None else ""
+            
+        return {"ui": {"text": [current_text]}, "result": (current_text,)}
 
 NODE_CLASS_MAPPINGS = {
     "MaskToSAMCoords": MaskToSAMCoords,
