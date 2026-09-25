@@ -12,6 +12,11 @@ app.registerExtension({
         LiteGraph.ContextMenu = function (values, options) {
             const menuInstance = new OrigContextMenu(values, options);
 
+            // 拦截二级子菜单，防无限套娃
+            if (options?.parentMenu || options?.fromSlotJumper) {
+                return menuInstance;
+            }
+
             try {
                 const canvas = app.canvas;
                 const graph = canvas.graph || app.graph;
@@ -34,7 +39,7 @@ app.registerExtension({
         function resolveTargetSlot(graph, canvas, options) {
             const slotTitle = options?.title;
 
-            // 1. Subgraph 边界外联槽 (通过 options.title 精准捕获)
+            // 1. Subgraph 边界外联槽
             if (slotTitle && graph) {
                 const subIn = findInSubgraphCollections(graph.inputs || graph._inputs, slotTitle);
                 if (subIn) return { kind: "subgraph_input", data: subIn, name: slotTitle };
@@ -78,19 +83,17 @@ app.registerExtension({
         }
 
         // =========================================================================
-        // 核心辅助：严格判断一根线是否【仅属于】当前被右键点击的这个外联输入端口
+        // 核心辅助：判断一根线是否【仅属于】当前被右键点击的这个外联输入端口
         // =========================================================================
         function isLinkFromThisSubgraphInput(link, subIn, targetName, graph) {
             if (!link) return false;
 
-            // 1. 确认来自外联源头
             const inputNode = graph.inputNode || graph._inputNode;
             const isOuter = (link.origin_id == null || link.origin_id < 0 || link.origin_id === "inputs" || (inputNode && link.origin_id === inputNode.id));
             if (!isOuter) return false;
 
             const linkId = link.id;
 
-            // 2. 如果 subIn 自身记录了 links / link，直接精确匹配
             if (subIn) {
                 if (subIn.link === linkId) return true;
                 if (Array.isArray(subIn.links) && subIn.links.includes(linkId)) return true;
@@ -98,7 +101,6 @@ app.registerExtension({
                 if (subIn.slot != null && link.origin_slot === subIn.slot) return true;
             }
 
-            // 3. 按当前外联端口在 inputs 列表中的真实索引严格对齐
             const inputsList = graph.inputs instanceof Map
                 ? Array.from(graph.inputs.values())
                 : (Array.isArray(graph.inputs) ? graph.inputs : Object.values(graph.inputs || {}));
@@ -111,7 +113,6 @@ app.registerExtension({
                 return true;
             }
 
-            // 4. 通过虚拟输入节点 inputNode.outputs 槽位名称进行严格校验
             if (inputNode && inputNode.outputs) {
                 const slot = inputNode.outputs[link.origin_slot];
                 if (slot && (slot.name === targetName || slot.label === targetName)) {
@@ -124,12 +125,65 @@ app.registerExtension({
                 }
             }
 
-            // 5. 校验连线上挂载的 origin_name
             if (link.origin_name && targetName && link.origin_name === targetName) {
                 return true;
             }
 
             return false;
+        }
+
+        // =========================================================================
+        // 核心辅助：多维获取插槽真实对外展示名称 (优先 label，次选 name)
+        // =========================================================================
+        function getRealSlotName(destNode, link, isInput, graph) {
+            if (!destNode || !link) return "";
+            const slotIndex = isInput ? link.target_slot : link.origin_slot;
+            const slot = isInput ? destNode.inputs?.[slotIndex] : destNode.outputs?.[slotIndex];
+
+            // 1. 优先读取插槽自身的 label (用户自定义 Rename 的名字)
+            if (slot?.label) return slot.label;
+
+            // 2. 如果是连向子图外联端口（无论是子图内部输出端还是主图子图节点），深度解算真实别名
+            const customSubName = findSubgraphPortLabel(graph, destNode, link, isInput);
+            if (customSubName) return customSubName;
+
+            // 3. 次选原始 name，最后退回索引数字
+            return slot?.name || slotIndex;
+        }
+
+        // 深度解算子图外联端口的 Rename 名称
+        function findSubgraphPortLabel(graph, destNode, link, isInput) {
+            if (!destNode || !link) return null;
+
+            // 场景 A：在子图内部连向右侧外联输出代理 (id: -11 / outputNode)
+            if (destNode.id === -11 || destNode === graph.outputNode) {
+                const outputs = graph.outputs || graph._outputs;
+                if (outputs) {
+                    const list = outputs instanceof Map ? Array.from(outputs.values()) : (Array.isArray(outputs) ? outputs : Object.values(outputs));
+                    const slotIdx = link.target_slot;
+                    if (slotIdx != null && list[slotIdx]) {
+                        return list[slotIdx].label || list[slotIdx].name;
+                    }
+                    for (const item of list) {
+                        if (item.id === slotIdx || item.slot === slotIdx || item.link === link.id || (item.links && item.links.includes(link.id))) {
+                            return item.label || item.name;
+                        }
+                    }
+                }
+            }
+
+            // 场景 B：在主图上，上游节点连向了一个 Subgraph 节点
+            if (destNode.subgraph) {
+                const subInputs = destNode.subgraph.inputs || destNode.subgraph._inputs;
+                if (subInputs) {
+                    const list = subInputs instanceof Map ? Array.from(subInputs.values()) : (Array.isArray(subInputs) ? subInputs : Object.values(subInputs));
+                    if (list[link.target_slot]) {
+                        return list[link.target_slot].label || list[link.target_slot].name;
+                    }
+                }
+            }
+
+            return null;
         }
 
         // =========================================================================
@@ -140,14 +194,13 @@ app.registerExtension({
             if (!rootEl) return;
 
             // =====================================================================
-            // A. 外联端口向内部跳转（仅列出属于当前外联端口的下游目标）
+            // A. 外联端口向内部跳转
             // =====================================================================
             if (target.kind === "subgraph_input") {
                 const subIn = target.data;
                 const targetName = target.name || subIn?.name || subIn?.label;
                 const targets = [];
 
-                // 遍历内部所有节点，严格筛选属于当前插槽的连线
                 if (graph._nodes) {
                     for (const n of graph._nodes) {
                         if (n.id === -10 || n.id === -11 || !n.inputs) continue;
@@ -155,9 +208,9 @@ app.registerExtension({
                             const inp = n.inputs[i];
                             if (inp.link != null) {
                                 const l = getLink(graph, inp.link);
-                                // 必须通过严苛校验：只收集连向当前 targetName 的线
                                 if (l && isLinkFromThisSubgraphInput(l, subIn, targetName, graph)) {
-                                    const slotName = inp.name || i;
+                                    // 优先读取 label
+                                    const slotName = inp.label || inp.name || i;
                                     const title = n.title || n.type || `#${n.id}`;
                                     targets.push({
                                         label: `[${title}] . ${slotName}`,
@@ -211,10 +264,10 @@ app.registerExtension({
                             return;
                         }
 
-                        // 正常节点跳转
+                        // 正常节点跳转 (优先读取 originSlot.label)
                         const originSlot = originNode.outputs?.[link.origin_slot];
                         const title = originNode.title || originNode.type || `#${link.origin_id}`;
-                        const slotName = originSlot?.name || link.origin_slot;
+                        const slotName = originSlot?.label || originSlot?.name || link.origin_slot;
 
                         createDOMMenuItem(rootEl, `Jump to: [${title}] . ${slotName}`, () => {
                             jumpAndHighlightSlot(originNode, false, link.origin_slot);
@@ -222,15 +275,26 @@ app.registerExtension({
                         });
                     }
                 } else if (!isInput && slotDef.links && slotDef.links.length > 0) {
-                    // 输出端多连线处理
+                    // =========================================================
+                    // 输出端多连线：修复只能识别成 .source 的核心处
+                    // =========================================================
                     const targets = [];
                     for (const lid of slotDef.links) {
                         const link = getLink(graph, lid);
                         if (!link) continue;
                         const dest = graph.getNodeById(link.target_id);
                         if (!dest) continue;
+
+                        // 节点标题 (如果是外联输出虚拟代理则友好命名)
+                        const nodeTitle = (dest.id === -11 || dest === graph.outputNode)
+                            ? "外联输出"
+                            : (dest.title || dest.type || `#${dest.id}`);
+
+                        // 【核心修复】：全面解算真实的 slotName，绝对避开默认的 .source
+                        const realSlotName = getRealSlotName(dest, link, true, graph);
+
                         targets.push({
-                            label: `[${dest.title || dest.type}] . ${dest.inputs?.[link.target_slot]?.name || link.target_slot}`,
+                            label: `[${nodeTitle}] . ${realSlotName}`,
                             node: dest,
                             slotIndex: link.target_slot
                         });
@@ -266,7 +330,6 @@ app.registerExtension({
             if (!link) return null;
             const slotIdx = link.origin_slot;
 
-            // 1. 从虚拟输入节点 inputNode 提取
             const inputNode = graph.inputNode || graph._inputNode || (graph.getNodeById && graph.getNodeById(link.origin_id));
             if (inputNode && inputNode.outputs) {
                 if (slotIdx != null && inputNode.outputs[slotIdx]) {
@@ -277,7 +340,6 @@ app.registerExtension({
                 if (foundSlot) return foundSlot.label || foundSlot.name;
             }
 
-            // 2. 从 Subgraph.inputs 集合提取
             const inputs = graph.inputs || graph._inputs;
             if (inputs) {
                 const list = inputs instanceof Map ? Array.from(inputs.values()) : (Array.isArray(inputs) ? inputs : Object.values(inputs));
@@ -345,7 +407,8 @@ app.registerExtension({
                     })),
                     {
                         event: e,
-                        parentMenu: menuInstance
+                        parentMenu: menuInstance,
+                        fromSlotJumper: true
                     }
                 );
 
