@@ -34,7 +34,7 @@ app.registerExtension({
         function resolveTargetSlot(graph, canvas, options) {
             const slotTitle = options?.title;
 
-            // 1. Subgraph 边界外联槽
+            // 1. Subgraph 边界外联槽 (通过 options.title 精准捕获)
             if (slotTitle && graph) {
                 const subIn = findInSubgraphCollections(graph.inputs || graph._inputs, slotTitle);
                 if (subIn) return { kind: "subgraph_input", data: subIn, name: slotTitle };
@@ -78,43 +78,89 @@ app.registerExtension({
         }
 
         // =========================================================================
+        // 核心辅助：严格判断一根线是否【仅属于】当前被右键点击的这个外联输入端口
+        // =========================================================================
+        function isLinkFromThisSubgraphInput(link, subIn, targetName, graph) {
+            if (!link) return false;
+
+            // 1. 确认来自外联源头
+            const inputNode = graph.inputNode || graph._inputNode;
+            const isOuter = (link.origin_id == null || link.origin_id < 0 || link.origin_id === "inputs" || (inputNode && link.origin_id === inputNode.id));
+            if (!isOuter) return false;
+
+            const linkId = link.id;
+
+            // 2. 如果 subIn 自身记录了 links / link，直接精确匹配
+            if (subIn) {
+                if (subIn.link === linkId) return true;
+                if (Array.isArray(subIn.links) && subIn.links.includes(linkId)) return true;
+                if (subIn.id != null && link.origin_slot === subIn.id) return true;
+                if (subIn.slot != null && link.origin_slot === subIn.slot) return true;
+            }
+
+            // 3. 按当前外联端口在 inputs 列表中的真实索引严格对齐
+            const inputsList = graph.inputs instanceof Map
+                ? Array.from(graph.inputs.values())
+                : (Array.isArray(graph.inputs) ? graph.inputs : Object.values(graph.inputs || {}));
+            
+            let subInIndex = subIn ? inputsList.indexOf(subIn) : -1;
+            if (subInIndex === -1 && targetName) {
+                subInIndex = inputsList.findIndex(item => item.name === targetName || item.label === targetName);
+            }
+            if (subInIndex !== -1 && link.origin_slot === subInIndex) {
+                return true;
+            }
+
+            // 4. 通过虚拟输入节点 inputNode.outputs 槽位名称进行严格校验
+            if (inputNode && inputNode.outputs) {
+                const slot = inputNode.outputs[link.origin_slot];
+                if (slot && (slot.name === targetName || slot.label === targetName)) {
+                    return true;
+                }
+                const targetSlotIdx = inputNode.outputs.findIndex(s => s.name === targetName || s.label === targetName);
+                if (targetSlotIdx !== -1) {
+                    if (link.origin_slot === targetSlotIdx) return true;
+                    if (inputNode.outputs[targetSlotIdx].links && inputNode.outputs[targetSlotIdx].links.includes(linkId)) return true;
+                }
+            }
+
+            // 5. 校验连线上挂载的 origin_name
+            if (link.origin_name && targetName && link.origin_name === targetName) {
+                return true;
+            }
+
+            return false;
+        }
+
+        // =========================================================================
         // 2. 菜单构建与注入
         // =========================================================================
         function injectJumpItem(menuInstance, target, graph) {
             const rootEl = menuInstance.root;
             if (!rootEl) return;
 
-            // A. 外联端口向内部跳转
+            // =====================================================================
+            // A. 外联端口向内部跳转（仅列出属于当前外联端口的下游目标）
+            // =====================================================================
             if (target.kind === "subgraph_input") {
                 const subIn = target.data;
+                const targetName = target.name || subIn?.name || subIn?.label;
                 const targets = [];
-                const linkIds = subIn?.links || (subIn?.link != null ? [subIn.link] : []);
 
-                for (const lid of linkIds) {
-                    const link = getLink(graph, lid);
-                    if (!link) continue;
-                    const destNode = graph.getNodeById(link.target_id);
-                    if (!destNode) continue;
-                    const slotName = destNode.inputs?.[link.target_slot]?.name || link.target_slot;
-                    const title = destNode.title || destNode.type || `#${link.target_id}`;
-                    targets.push({
-                        label: `[${title}] . ${slotName}`,
-                        node: destNode,
-                        slotIndex: link.target_slot
-                    });
-                }
-
-                // 反向扫描兜底
-                if (targets.length === 0 && graph._nodes) {
+                // 遍历内部所有节点，严格筛选属于当前插槽的连线
+                if (graph._nodes) {
                     for (const n of graph._nodes) {
-                        if (!n.inputs) continue;
+                        if (n.id === -10 || n.id === -11 || !n.inputs) continue;
                         for (let i = 0; i < n.inputs.length; i++) {
                             const inp = n.inputs[i];
                             if (inp.link != null) {
                                 const l = getLink(graph, inp.link);
-                                if (l && (l.origin_id == null || l.origin_id < 0 || l.origin_id === "inputs" || l.origin_slot === subIn?.id)) {
+                                // 必须通过严苛校验：只收集连向当前 targetName 的线
+                                if (l && isLinkFromThisSubgraphInput(l, subIn, targetName, graph)) {
+                                    const slotName = inp.name || i;
+                                    const title = n.title || n.type || `#${n.id}`;
                                     targets.push({
-                                        label: `[${n.title || n.type || n.id}] . ${inp.name || i}`,
+                                        label: `[${title}] . ${slotName}`,
                                         node: n,
                                         slotIndex: i
                                     });
@@ -130,7 +176,6 @@ app.registerExtension({
                         menuInstance.close();
                     });
                 } else if (targets.length > 1) {
-                    // 【优化】：使用防重复堆叠的专属子菜单控制器
                     createDOMSubmenuItem(
                         rootEl,
                         menuInstance,
@@ -144,7 +189,9 @@ app.registerExtension({
                 return;
             }
 
+            // =====================================================================
             // B. 内部节点跳转
+            // =====================================================================
             if (target.kind === "node_slot") {
                 const { node, isInput, slotIndex, slotDef } = target;
 
@@ -155,7 +202,7 @@ app.registerExtension({
 
                         // 反跳外联端口
                         if (!originNode || link.origin_id < 0 || link.origin_id === "inputs") {
-                            const subInName = findSubgraphInputName(graph, slotDef.link) || "外联端口";
+                            const subInName = findSubgraphInputName(graph, slotDef.link) || "*";
 
                             createDOMMenuItem(rootEl, `Jump to: [${subInName}]`, () => {
                                 executeReverseJump(graph, link, node, slotIndex, subInName);
@@ -195,7 +242,6 @@ app.registerExtension({
                             menuInstance.close();
                         });
                     } else if (targets.length > 1) {
-                        // 【优化】：使用防重复堆叠的专属子菜单控制器
                         createDOMSubmenuItem(
                             rootEl,
                             menuInstance,
@@ -211,7 +257,46 @@ app.registerExtension({
         }
 
         // =========================================================================
-        // 核心优化：防重复堆叠的子菜单组件 (支持 Toggle 点击切换 + 联动关闭)
+        // 核心辅助：准确反查外联端点的真实自定义 Rename 名称
+        // =========================================================================
+        function findSubgraphInputName(graph, linkId) {
+            if (!graph || linkId == null) return null;
+
+            const link = getLink(graph, linkId);
+            if (!link) return null;
+            const slotIdx = link.origin_slot;
+
+            // 1. 从虚拟输入节点 inputNode 提取
+            const inputNode = graph.inputNode || graph._inputNode || (graph.getNodeById && graph.getNodeById(link.origin_id));
+            if (inputNode && inputNode.outputs) {
+                if (slotIdx != null && inputNode.outputs[slotIdx]) {
+                    const s = inputNode.outputs[slotIdx];
+                    if (s.label || s.name) return s.label || s.name;
+                }
+                const foundSlot = inputNode.outputs.find(s => s.links && s.links.includes(linkId));
+                if (foundSlot) return foundSlot.label || foundSlot.name;
+            }
+
+            // 2. 从 Subgraph.inputs 集合提取
+            const inputs = graph.inputs || graph._inputs;
+            if (inputs) {
+                const list = inputs instanceof Map ? Array.from(inputs.values()) : (Array.isArray(inputs) ? inputs : Object.values(inputs));
+                if (slotIdx != null && list[slotIdx]) {
+                    const item = list[slotIdx];
+                    return item.label || item.name;
+                }
+                for (const item of list) {
+                    if (item.id === slotIdx || item.slot === slotIdx || item.link === linkId || (item.links && item.links.includes(linkId))) {
+                        return item.label || item.name;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        // =========================================================================
+        // 界面组件：对齐原生边距 + 自动单箭头
         // =========================================================================
         function createDOMSubmenuItem(menuRoot, menuInstance, text, optionsList) {
             const itemEl = document.createElement("div");
@@ -231,18 +316,12 @@ app.registerExtension({
                 }
             };
 
-            itemEl.addEventListener("mouseenter", () => {
-                itemEl.style.backgroundColor = "#2a3942";
-            });
-
-            itemEl.addEventListener("mouseleave", () => {
-                itemEl.style.backgroundColor = "transparent";
-            });
+            itemEl.addEventListener("mouseenter", () => itemEl.style.backgroundColor = "#2a3942");
+            itemEl.addEventListener("mouseleave", () => itemEl.style.backgroundColor = "transparent");
 
             itemEl.addEventListener("click", (e) => {
                 e.stopPropagation();
 
-                // Toggle：展开/收起切换
                 if (activeSubmenu) {
                     closeSubmenu();
                     return;
@@ -285,9 +364,6 @@ app.registerExtension({
             menuRoot.insertBefore(itemEl, menuRoot.firstChild);
         }
 
-        // =========================================================================
-        // 单项普通菜单生成器
-        // =========================================================================
         function createDOMMenuItem(menuRoot, text, onClick) {
             const itemEl = document.createElement("div");
             itemEl.className = "litemenu-entry";
@@ -354,83 +430,6 @@ app.registerExtension({
             if (typeof pool === "object") {
                 return pool[linkId];
             }
-            return null;
-        }
-
-        function findSubgraphInputName(graph, linkId) {
-            if (!graph || linkId == null) return null;
-
-            const link = getLink(graph, linkId);
-            if (!link) return null;
-            const slotIdx = link.origin_slot;
-
-            // =====================================================================
-            // 途径 1：直接从虚拟输入节点 inputNode 提取 (用户 Rename 后这里必定实时更新)
-            // =====================================================================
-            const inputNode = graph.inputNode || graph._inputNode || (graph.getNodeById && graph.getNodeById(link.origin_id));
-            if (inputNode && inputNode.outputs) {
-                // A. 按 slotIdx 下标取
-                if (slotIdx != null && inputNode.outputs[slotIdx]) {
-                    const s = inputNode.outputs[slotIdx];
-                    const customName = s.label || s.name;
-                    if (customName) return customName;
-                }
-                // B. 按 link ID 匹配查找该 slot
-                const foundSlot = inputNode.outputs.find(s => s.links && s.links.includes(linkId));
-                if (foundSlot) {
-                    return foundSlot.label || foundSlot.name;
-                }
-            }
-
-            // =====================================================================
-            // 途径 2：从 Subgraph.inputs (或 _inputs) 集合查找
-            // =====================================================================
-            const inputs = graph.inputs || graph._inputs;
-            if (inputs) {
-                // 如果是 Map 对象
-                if (inputs instanceof Map) {
-                    // 先看是否包含以 slotIdx 为 key 的项
-                    if (inputs.has(slotIdx)) {
-                        const item = inputs.get(slotIdx);
-                        return item.label || item.name;
-                    }
-                    // 遍历 Map 中所有项查找
-                    let i = 0;
-                    for (const [key, item] of inputs.entries()) {
-                        // 匹配下标、id、或包含此 linkId
-                        if (i === slotIdx || item.id === slotIdx || item.slot === slotIdx || item.link === linkId || (item.links && item.links.includes(linkId))) {
-                            return item.label || item.name || key;
-                        }
-                        i++;
-                    }
-                } 
-                // 如果是 Array 或 Object
-                else {
-                    const list = Array.isArray(inputs) ? inputs : Object.values(inputs);
-                    // 1. 下标直接命中
-                    if (slotIdx != null && list[slotIdx]) {
-                        const item = list[slotIdx];
-                        return item.label || item.name;
-                    }
-                    // 2. 属性匹配 (支持 Rename 后的自定义 label / name)
-                    for (const item of list) {
-                        if (item.id === slotIdx || item.slot === slotIdx || item.link === linkId || (item.links && item.links.includes(linkId))) {
-                            return item.label || item.name;
-                        }
-                    }
-                }
-            }
-
-            // =====================================================================
-            // 途径 3：从外部主图的 GroupNode 映射表查询 (防止子图内没存)
-            // =====================================================================
-            if (graph.subgraphData?.inputs) {
-                const subInputs = graph.subgraphData.inputs;
-                if (subInputs[slotIdx]) {
-                    return subInputs[slotIdx].label || subInputs[slotIdx].name;
-                }
-            }
-
             return null;
         }
 
