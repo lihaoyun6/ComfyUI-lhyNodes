@@ -853,7 +853,7 @@ app.registerExtension({
                 const elapsed = performance.now() - animStartTime;
                 
                 // 1. 【控制消失时间】：动画总持续时间 (毫秒，1500 = 1.5 秒，可自行调节)
-                const duration = 1200;
+                const duration = 1500;
                 
                 if (elapsed > duration) {
                     highlightData = null;
